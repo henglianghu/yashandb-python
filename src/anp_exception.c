@@ -1,5 +1,4 @@
 #include "anp_exception.h"
-#include "cod_error.h"
 #include "structmember.h"
 
 PyObject *anpWarningException = NULL;
@@ -167,8 +166,8 @@ int anpRaiseAndReturnIntException(void)
 {
     AncInt32   code;
     AncTextPos pos;
-    CodChar*   message;
-    CodChar*   sqlStat;
+    AncChar*   message;
+    AncChar*   sqlStat;
     ancGetLastError(&code, &message, &sqlStat, &pos);
     return anpRaiseExceptionFromInfo(code, message, sqlStat, &pos);
 }

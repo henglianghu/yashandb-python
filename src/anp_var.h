@@ -2,7 +2,7 @@
 #define ANCHOR_ANP_VAR_H
 
 #include "Python.h"
-#include "anc.h"
+#include "anp_cli.h"
 #include "anp_cursor.h"
 
 typedef struct StAnpVar {

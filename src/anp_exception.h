@@ -2,8 +2,7 @@
 #define ANCHOR_ANP_EXCEPTION_H
 
 #include "Python.h"
-#include "anc.h"
-#include "cod_error.h"
+#include "anp_cli.h"
 
 typedef struct StAnpError {
     PyObject_HEAD

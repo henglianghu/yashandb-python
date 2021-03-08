@@ -194,9 +194,9 @@ AncBool anpConnectionIsConnected(AnpConnection *conn)
 {
     if (conn->hConn == NULL) {
         anpRaiseExceptionFromString(anpInterfaceErrorException, "not connected");
-        return COD_FALSE;
+        return ANC_FALSE;
     }
-    return COD_TRUE;
+    return ANC_TRUE;
 }
 
 static PyObject *anpGetAutoCommit(AnpConnection *conn, void *unused)

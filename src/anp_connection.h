@@ -3,7 +3,7 @@
 #define ANCHOR_ANP_CONNECTION_H
 
 #include "Python.h"
-#include "anc.h"
+#include "anp_cli.h"
 
 typedef struct {
     PyObject_HEAD

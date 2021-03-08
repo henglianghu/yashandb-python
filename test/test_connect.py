@@ -64,9 +64,9 @@ class TestCase(test_base.TestBaseCase):
 
     def test_repr_connection(self):
         conn = anchor.connect(dsn="127.0.0.1:1688", user="sys", password="sys")
-        self.assertEquals(repr(conn), '<anchor_python.Connection to sys@127.0.0.1:1688>')
+        self.assertEquals(repr(conn), 'anchor_python.Connection to sys@127.0.0.1:1688')
         conn.close()
-        self.assertEquals(repr(conn), '<anchor_python.Connection to sys@127.0.0.1:1688>')
+        self.assertEquals(repr(conn), 'anchor_python.Connection to sys@127.0.0.1:1688')
 
 if __name__ == '__main__':
     test_base.run_test_cases()

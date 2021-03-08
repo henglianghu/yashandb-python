@@ -105,9 +105,9 @@ AncBool anpCheckVar(PyObject* object)
     return (Py_TYPE(object) == &anchorPyTypeVar);
 }
 
-static PyObject *anpVarToPython(AncType type, CodChar* data)
+static PyObject *anpVarToPython(AncType type, AncChar* data)
 {
-    CodChar message[120];
+    AncChar message[120];
     PyObject* result;
 
     switch (type) {

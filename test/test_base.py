@@ -1,5 +1,4 @@
 import unittest
-
 import anchor_python as anchor
 
 class TestBaseCase(unittest.TestCase):

@@ -1,6 +1,5 @@
 #include "anp_cursor.h"
 #include "structmember.h"
-#include "cod_inc.h"
 #include "anp_exception.h"
 #include "anp_var.h"
 
@@ -42,7 +41,7 @@ static void anpCursorFree(AnpCursor* cursor)
     if (cursor->isOpen && cursor->connection->hConn != NULL) {
         ancFreeHandle(ANC_HANDLE_STMT, cursor->hStmt);
         cursor->hStmt = NULL;
-        cursor->isOpen = COD_FALSE;
+        cursor->isOpen = ANC_FALSE;
     }
 
     Py_CLEAR(cursor->connection);
@@ -53,14 +52,14 @@ static AncBool anpCursorIsOpen(AnpCursor* cursor)
 {
     if (!cursor->isOpen) {
         anpRaiseExceptionFromString(anpInterfaceErrorException, "not open");
-        return COD_FALSE;
+        return ANC_FALSE;
     }
     return anpConnectionIsConnected(cursor->connection);
 }
 
-CodUint32 anpGetDisplaySize(AncColumnDesc* desc)
+AncUint32 anpGetDisplaySize(AncColumnDesc* desc)
 {
-    CodUint32 displaySize;
+    AncUint32 displaySize;
     switch (desc->type) {
         case ANC_TYPE_CHAR:
         case ANC_TYPE_VARCHAR:
@@ -387,7 +386,7 @@ AncResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, Anc
     }
 }
 
-void anpGetColumnSize(AncColumnDesc* desc, CodUint32* bindSize)
+void anpGetColumnSize(AncColumnDesc* desc, AncUint32* bindSize)
 {
     switch (desc->type) {
         case ANC_TYPE_CHAR:
