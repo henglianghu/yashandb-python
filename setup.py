@@ -1,5 +1,8 @@
 from setuptools import setup, Extension
 
+#define the version
+BUILD_VERSION = "0.1.1"
+
 apmodule = Extension('anchor_python',
                     sources = ['src/anp_cli.c',
                                'src/anp_connection.c',
@@ -14,14 +17,6 @@ apmodule = Extension('anchor_python',
                     )
 
 setup (
-    name='anchor_python',
-    version='0.1.1',
-    author='sics',
-    description='the python driver for anchorbase',
+    version=BUILD_VERSION,
     ext_modules=[apmodule],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: OS Independent",
-    ],
-    python_requires=">=3.6",
 )

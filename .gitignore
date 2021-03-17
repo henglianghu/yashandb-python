@@ -4,5 +4,6 @@ build
 __pycache__
 ancli
 
+.idea
 .vscode
 *.egg
