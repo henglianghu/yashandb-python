@@ -1,0 +1,5 @@
+include MANIFEST.in
+include *.txt
+recursive-include src *.c
+recursive-include src *.h
+recursive-include test *.py 
