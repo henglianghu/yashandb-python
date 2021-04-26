@@ -81,13 +81,13 @@ class TestCase(test_base.TestBaseCase):
             "t_python_desc", "int1 tinyint, int2 smallint, int3 integer, int4 bigint, int5 number(10,5), int6 float, int7 double"))
         self.cursor.execute("select * from t_python_desc")
         desc = self.cursor.description
-        self.assertEqual(desc, [('INT1', 1, 5, 1, None, None, 1),
-                                ('INT2', 2, 8, 2, None, None, 1),
-                                ('INT3', 3, 12, 4, None, None, 1),
-                                ('INT4', 4, 21, 8, None, None, 1),
-                                ('INT5', 7, 20, None, 10, 5, 1),
-                                ('INT6', 5, 21, 4, None, None, 1),
-                                ('INT7', 6, 21, 8, None, None, 1)])
+        self.assertEqual(desc, [('INT1', 2, 5, 1, None, None, 1),
+                                ('INT2', 3, 8, 2, None, None, 1),
+                                ('INT3', 4, 12, 4, None, None, 1),
+                                ('INT4', 5, 21, 8, None, None, 1),
+                                ('INT5', 12, 20, None, 10, 5, 1),
+                                ('INT6', 10, 21, 4, None, None, 1),
+                                ('INT7', 11, 21, 8, None, None, 1)])
 
     def test_cursor_iter(self):
         self.cursor.execute("truncate table test_cursor")
