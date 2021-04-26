@@ -431,7 +431,7 @@ void anpGetColumnSize(AncColumnDesc* desc, AncUint32* bindSize)
             break;
 
         case ANC_TYPE_NUMBER:
-            *bindSize = 1000;
+            *bindSize = codSizeAlign4(desc->precision + 8);;
             break;
 
         case ANC_TYPE_BIT:

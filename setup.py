@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 
 #define the version
-BUILD_VERSION = "0.1.1"
+BUILD_VERSION = "0.1.2"
 
 apmodule = Extension('anchor_python',
                     sources = ['src/anp_cli.c',
