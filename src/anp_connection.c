@@ -129,16 +129,18 @@ static PyObject *anpConnectionClose(AnpConnection *conn, PyObject *args)
 
 static PyObject *anpConnectionCommit(AnpConnection *conn, PyObject *args)
 {
+    AncResult ret;
     if (!anpConnectionIsConnected(conn)) {
         return anpRaiseAndReturnNullException();
     }
     if (conn->autocommit) {
         return anpRaiseExceptionFromString(anpNotSupportedException, "Cannot commit when autocommit is enabled.");
     }
-    if (ancPrepare(conn->hStmt, "commit") != ANC_SUCCESS) {
-        return anpRaiseAndReturnNullException();
-    }
-    if (ancExecute(conn->hStmt) != ANC_SUCCESS) {
+    
+    Py_BEGIN_ALLOW_THREADS
+    ret = ancCommit(conn->hConn);
+    Py_END_ALLOW_THREADS
+    if (ret != ANC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     Py_RETURN_NONE;
@@ -146,16 +148,17 @@ static PyObject *anpConnectionCommit(AnpConnection *conn, PyObject *args)
 
 static PyObject *anpConnectionRollback(AnpConnection *conn, PyObject *args)
 {
+    AncResult ret;
     if (!anpConnectionIsConnected(conn)) {
         return anpRaiseAndReturnNullException();
     }
     if (conn->autocommit) {
         return anpRaiseExceptionFromString(anpNotSupportedException, "Cannot rollback when autocommit is enabled.");
     }
-    if (ancPrepare(conn->hStmt, "rollback") != ANC_SUCCESS) {
-        return anpRaiseAndReturnNullException();
-    }
-    if (ancExecute(conn->hStmt) != ANC_SUCCESS) {
+    Py_BEGIN_ALLOW_THREADS
+    ret = ancRollback(conn->hConn);
+    Py_END_ALLOW_THREADS
+    if (ret != ANC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     Py_RETURN_NONE;
