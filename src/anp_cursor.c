@@ -150,7 +150,7 @@ static PyObject* anpCursorItemDescription(AnpCursor* cursor, AncUint32 pos)
         PyTuple_SET_ITEM(tuple, 3, Py_None);
     }
 
-    if (desc.precision != 0 || desc.scale != 0) {
+    if (desc.precision != 255 || desc.scale != -128) {
         PyTuple_SET_ITEM(tuple, 4, PyLong_FromLong(desc.precision));
         PyTuple_SET_ITEM(tuple, 5, PyLong_FromLong(desc.scale));
     } else {
@@ -568,7 +568,11 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_CLEAR(cursor->fetchVariables);
 
         // prepare the statement, if applicable
-        if (ancPrepare(cursor->hStmt, PyBytes_AsString(PyUnicode_AsUTF8String(statement))) != ANC_SUCCESS) {
+        AncChar * sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
+        Py_BEGIN_ALLOW_THREADS
+        status = ancPrepare(cursor->hStmt, sql);
+        Py_END_ALLOW_THREADS
+        if (status != ANC_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
         if (ancGetStmtAttr(cursor->hStmt, ANC_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType)) != ANC_SUCCESS) {
@@ -589,7 +593,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     // execute the statement
     Py_BEGIN_ALLOW_THREADS
-     status = ancExecute(cursor->hStmt);
+    status = ancExecute(cursor->hStmt);
     Py_END_ALLOW_THREADS
     if (status != ANC_SUCCESS) {
         return anpRaiseAndReturnNullException();
@@ -676,12 +680,16 @@ static AncResult anpCursorCheck(AnpCursor* cursor)
 
 static PyObject* anpCursorFetchOne(AnpCursor* cursor, PyObject* args)
 {
+    AncResult ret;
     if (anpCursorCheck(cursor) != ANC_SUCCESS) {
         return NULL;
     }
     
     AncUint32 rows;
-    if (ancFetch(cursor->hStmt, &rows) != ANC_SUCCESS) {
+    Py_BEGIN_ALLOW_THREADS
+    ret = ancFetch(cursor->hStmt, &rows);
+    Py_END_ALLOW_THREADS
+    if (ret != ANC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     if (rows > 0) {
@@ -738,12 +746,16 @@ static PyObject* anpCursorIter(AnpCursor* cursor)
 
 static PyObject* anpCursorNext(AnpCursor * cursor)
 {
+    AncResult ret;
     if (anpCursorCheck(cursor) != ANC_SUCCESS) {
         return NULL;
     }
 
     AncUint32 rows;
-    if (ancFetch(cursor->hStmt, &rows) != ANC_SUCCESS) {
+    Py_BEGIN_ALLOW_THREADS
+    ret = ancFetch(cursor->hStmt, &rows);
+    Py_END_ALLOW_THREADS
+    if (ret != ANC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     printf("anpCursorNext:%d\n", rows);
