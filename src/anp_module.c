@@ -48,9 +48,6 @@ PyInit_anchor_python(void)
         return NULL;
     }
 
-    if (anpRegisterException(module) != ANC_SUCCESS) {
-        return NULL;
-    }
     // create constants required by Python DB API 2.0
     if (PyModule_AddStringConstant(module, "apilevel", "2.0") < 0) {
         return NULL;
