@@ -105,6 +105,8 @@ class TestCase(test_base.TestBaseCase):
         cur.close()
         self.assertRaisesRegex(anchor.InterfaceError, 'not open', next, cur)
 
+    def test_cursor_db_error(self):
+        self.assertRaisesRegex(anchor.DatabaseError, "table or view SYS.TTTTTTTTTTTTT not found", self.cursor.execute, "select * from ttttttttttttt")
 
 if __name__ == "__main__":
     test_base.run_test_cases()
