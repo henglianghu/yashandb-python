@@ -59,7 +59,7 @@ class TestCase(test_base.TestBaseCase):
     def test_cursor_named_param(self):
         self.cursor.execute("select * from v$session where sid=:id", (16,))
         row = self.cursor.fetchone()
-        self.assertEqual(1, self.cursor.rowcount)
+        self.assertGreaterEqual(1, self.cursor.rowcount)
     
     def test_cursor_rowcount(self):
         self.cursor.execute("truncate table test_cursor")
@@ -85,7 +85,7 @@ class TestCase(test_base.TestBaseCase):
                                 ('INT2', 3, 8, 2, None, None, 1),
                                 ('INT3', 4, 12, 4, None, None, 1),
                                 ('INT4', 5, 21, 8, None, None, 1),
-                                ('INT5', 12, 20, None, 10, 5, 1),
+                                ('INT5', 12, 20, 7, 10, 5, 1),
                                 ('INT6', 10, 21, 4, None, None, 1),
                                 ('INT7', 11, 21, 8, None, None, 1)])
 

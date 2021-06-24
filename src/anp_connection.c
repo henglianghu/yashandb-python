@@ -225,7 +225,8 @@ static int anpSetAutoCommit(AnpConnection *conn, PyObject *value, void *closure)
     }
     conn->autocommit =  (value == Py_True);
     Py_INCREF(value);
-    if (ancSetConnAttr(conn->hConn, ANC_ATTR_AUTOCOMMIT, &conn->autocommit, sizeof(conn->autocommit)) != ANC_SUCCESS) {
+    AncInt32 aCommit = conn->autocommit;
+    if (ancSetConnAttr(conn->hConn, ANC_ATTR_AUTOCOMMIT, &aCommit, sizeof(aCommit)) != ANC_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
 
