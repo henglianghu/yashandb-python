@@ -566,6 +566,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_XINCREF(statement);
         cursor->statment = statement;
         Py_CLEAR(cursor->fetchVariables);
+        Py_CLEAR(cursor->bindVariables);
 
         // prepare the statement, if applicable
         AncChar * sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
