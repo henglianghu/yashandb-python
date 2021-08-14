@@ -13,9 +13,9 @@ static PyMethodDef AnchorMethods[] = {
     { NULL }
 };
 
-static struct PyModuleDef anchor_module = {
+static struct PyModuleDef yaspy_module = {
         PyModuleDef_HEAD_INIT,
-        "anchor_python",
+        "yaspy",
         NULL, /* module documentation, may be NULL */
         -1,       /* size of per-interpreter state of the module,
                  or -1 if the module keeps state in global variables. */
@@ -27,7 +27,7 @@ static struct PyModuleDef anchor_module = {
 };
 
 PyMODINIT_FUNC
-PyInit_anchor_python(void)
+PyInit_yaspy(void)
 {
     PyObject *module;
     
@@ -38,7 +38,7 @@ PyInit_anchor_python(void)
         return NULL;
     }
 
-    module = PyModule_Create(&anchor_module);
+    module = PyModule_Create(&yaspy_module);
     Py_INCREF(anpPyTypeDate);
     if (PyModule_AddObject(module, "Date", (PyObject*) anpPyTypeDate) < 0) {
         return NULL;

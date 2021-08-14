@@ -1,5 +1,5 @@
 import unittest
-import anchor_python as anchor
+import yaspy
 
 class TestBaseCase(unittest.TestCase):
     need_connection = True
@@ -10,7 +10,7 @@ class TestBaseCase(unittest.TestCase):
 
     def setUp(self):
         if self.need_connection:
-            self.connection = anchor.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
+            self.connection = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
             self.cursor = self.connection.cursor()
 
     def tearDown(self):

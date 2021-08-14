@@ -30,7 +30,7 @@ static PyGetSetDef anpCalcMembers[] = {
 
 PyTypeObject anchorPyTypeVar = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "anchor_python.Var",
+    .tp_name = "yaspy.Var",
     .tp_basicsize = sizeof(AnpVar),
     .tp_dealloc = (destructor)anpVarFree,
     .tp_repr = (reprfunc)anpVarRepr,

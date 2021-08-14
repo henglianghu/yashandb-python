@@ -254,7 +254,7 @@ static PyGetSetDef anpCalcMembers[] = {
 
 PyTypeObject anchorPyTypeConnection = {
         PyVarObject_HEAD_INIT(NULL, 0)
-        .tp_name = "anchor_python.Connection",
+        .tp_name = "yaspy.Connection",
         .tp_basicsize = sizeof(AnpConnection),
         .tp_dealloc = (destructor) anpFreeConnection,
         .tp_repr = (reprfunc) anpReprConnection,

@@ -1,6 +1,6 @@
-# anchor_python
+# yaspy
 
-anchor_python is a Python extension module, through which the AnchorBase database can be accessed. It follows the conventions of [Python Database API 2.0 Specification].
+yaspy is a Python extension module, through which the YashanDB database can be accessed. It follows the conventions of [Python Database API 2.0 Specification].
 
 ## Build
 `python setup.py build bdist_wheel`
@@ -17,6 +17,6 @@ See [/test].
 
 ## License
 
-anchor_python is a commercial software
+yaspy is a commercial software
 
 
