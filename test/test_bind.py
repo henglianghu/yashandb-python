@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 import test_base
-import anchor_python as anchor
 
 class TestCase(test_base.TestBaseCase):
     def setUp(self):

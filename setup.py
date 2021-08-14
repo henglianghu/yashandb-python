@@ -1,9 +1,9 @@
 from setuptools import setup, Extension
 
 #define the version
-BUILD_VERSION = "0.1.2"
+BUILD_VERSION = "0.1.3"
 
-apmodule = Extension('anchor_python',
+apmodule = Extension('yaspy',
                     sources = ['src/anp_cli.c',
                                'src/anp_connection.c',
                                'src/anp_cursor.c',
@@ -12,7 +12,7 @@ apmodule = Extension('anchor_python',
                                'src/anp_var.c'
                                ],
                     include_dirs=['ancli/include'],
-                    libraries=['ancli'],
+                    libraries=['yascli'],
                     library_dirs=['ancli/lib']
                     )
 

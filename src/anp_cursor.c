@@ -795,7 +795,7 @@ static PyGetSetDef anpCalcMembers[] = {
 
 PyTypeObject anchorPyTypeCursor = {
         PyVarObject_HEAD_INIT(NULL, 0)
-        .tp_name = "anchor_python.Cursor",
+        .tp_name = "yaspy.Cursor",
         .tp_basicsize = sizeof(AnpCursor),
         .tp_dealloc = (destructor) anpCursorFree,
         .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

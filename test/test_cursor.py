@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import test_base
-import anchor_python as anchor
+import yaspy
 
 class TestCase(test_base.TestBaseCase):
     def setUp(self):
@@ -100,13 +100,13 @@ class TestCase(test_base.TestBaseCase):
 
     def test_cursor_iter_error(self):
         cur = self.connection.cursor()
-        self.assertRaisesRegex(anchor.InterfaceError, 'not a query', next, cur)
+        self.assertRaisesRegex(yaspy.InterfaceError, 'not a query', next, cur)
         cur.execute("select * from test_cursor")
         cur.close()
-        self.assertRaisesRegex(anchor.InterfaceError, 'not open', next, cur)
+        self.assertRaisesRegex(yaspy.InterfaceError, 'not open', next, cur)
 
     def test_cursor_db_error(self):
-        self.assertRaisesRegex(anchor.DatabaseError, "table or view SYS.TTTTTTTTTTTTT not found", self.cursor.execute, "select * from ttttttttttttt")
+        self.assertRaisesRegex(yaspy.DatabaseError, "table or view SYS.TTTTTTTTTTTTT not found", self.cursor.execute, "select * from ttttttttttttt")
 
 if __name__ == "__main__":
     test_base.run_test_cases()

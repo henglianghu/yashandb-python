@@ -48,7 +48,7 @@ static int anpModuleSetException(PyObject *module, PyObject **exception,
 {
     char buffer[100];
 
-    sprintf(buffer, "anchor_python.%s", name);
+    sprintf(buffer, "yaspy.%s", name);
     *exception = PyErr_NewException(buffer, baseException, NULL);
     if (*exception == NULL) {
         return -1;
@@ -83,7 +83,7 @@ static PyMemberDef anpErrorMembers[] = {
 
 PyTypeObject anpPyTypeError = {
         PyVarObject_HEAD_INIT(NULL, 0)
-        .tp_name = "anchor_python._Error",
+        .tp_name = "yaspy._Error",
         .tp_basicsize = sizeof(AnpError),
         .tp_dealloc = (destructor) anpErrorFree,
         .tp_str = (reprfunc) anpErrorStr,
