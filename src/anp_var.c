@@ -184,6 +184,7 @@ int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
     if (PyBool_Check(value)) {
         AncBool* b = (AncBool *)var->data;
         b[arrayPos] = PyObject_IsTrue(value);
+        var->indicator[arrayPos] = (AncInt32)sizeof(AncBool);
         return 0;
     }
     if (PyUnicode_Check(value)) {
@@ -192,20 +193,24 @@ int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
             return -1;
         }
         strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(tmp));
+        var->indicator[arrayPos] = (int)PyUnicode_GET_LENGTH(value);
         return 0;
     }
     if (PyBytes_Check(value)) {
         strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
+        var->indicator[arrayPos] = (int)PyBytes_GET_SIZE(value);
         return 0;
     }
     if (PyLong_Check(value)) {
         AncInt32 *iv = (AncInt32 *)var->data;
         iv[arrayPos] = PyLong_AsLong(value);
+        var->indicator[arrayPos] = (AncInt32)sizeof(AncInt64);
         return 0;
     }
     if (PyFloat_Check(value)) {
         double *dv = (double *)var->data;
         dv[arrayPos] = PyFloat_AsDouble(value);
+        var->indicator[arrayPos] = (AncInt32)sizeof(double);
         return 0;
     }
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
@@ -221,10 +226,10 @@ int anpGetSize(PyObject * value)
         return 1;
     }
     if (PyUnicode_Check(value)) {
-        return (int)PyUnicode_GET_LENGTH(value);
+        return (int)PyUnicode_GET_LENGTH(value) + 1;
     }
     if (PyBytes_Check(value)) {
-        return (int)PyBytes_GET_SIZE(value);
+        return (int)PyBytes_GET_SIZE(value) + 1;
     }
     if (PyLong_Check(value)) {
         return 4;
