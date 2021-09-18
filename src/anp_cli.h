@@ -12,7 +12,4 @@ static inline AncUint32 codSizeAlign4(AncUint32 size)
     return (margin == 0) ? size : size + (4 - margin);
 }
 
-
-
-
 #endif  // ANCHOR_ANP_VAR_H

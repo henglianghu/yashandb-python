@@ -2,6 +2,8 @@ from decimal import Decimal
 
 import test_base
 import yaspy
+import random
+import string
 
 class TestCase(test_base.TestBaseCase):
     def setUp(self):
@@ -107,6 +109,18 @@ class TestCase(test_base.TestBaseCase):
 
     def test_cursor_db_error(self):
         self.assertRaisesRegex(yaspy.DatabaseError, "table or view SYS.TTTTTTTTTTTTT not found", self.cursor.execute, "select * from ttttttttttttt")
+
+    def test_bind_insert_char(self):
+        self.cursor.execute("drop table if exists test_char")
+        self.cursor.execute("create table test_char(col1 char(10), col2 integer)")
+        data = (random.choice(string.ascii_letters), random.randint(-32768, 32767))
+        self.cursor.execute("insert into test_char values(?,?)", data)
+        self.connection.commit()
+        self.cursor.execute("select count(*) from test_char")
+        row = self.cursor.fetchone()
+        assert(row[0] == 1)
+
+
 
 if __name__ == "__main__":
     test_base.run_test_cases()
