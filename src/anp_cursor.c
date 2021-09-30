@@ -710,14 +710,74 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args)
     return anpRaiseExceptionFromString(anpNotSupportedException, "executemany() not implement");
 }
 
-static PyObject* anpCursorFetchMany(AnpCursor* cursor, PyObject* args)
+static PyObject* anpCursorFetch(AnpCursor* cursor, AncUint32 fetchRows)
 {
-    return anpRaiseExceptionFromString(anpNotSupportedException, "fetchmany() not implement");
+    PyObject *list = NULL;
+    PyObject *row = NULL;
+    AncResult ret;
+    AncUint32 rowCount, rows;
+
+    if (anpCursorCheck(cursor) != ANC_SUCCESS) {
+        return NULL;
+    }
+
+    list = PyList_New(0);
+    if (list == NULL) {
+        return NULL;
+    }
+
+    for(rowCount = 0; fetchRows == 0 || rowCount < fetchRows; rowCount++) {
+        rows = 0;
+        Py_BEGIN_ALLOW_THREADS
+        ret = ancFetch(cursor->hStmt, &rows);
+        Py_END_ALLOW_THREADS
+
+        if (ret != ANC_SUCCESS) {
+            Py_DECREF(list);
+            return anpRaiseAndReturnNullException();
+        }
+
+        if (rows <= 0) {
+            break;
+        }
+
+        row = anpCursorCreateRow(cursor, 0);
+        if ( row == NULL) {
+            Py_DECREF(list);
+            return NULL;
+        }
+
+        if (PyList_Append(list, row) < 0) {
+            Py_DECREF(row);
+            Py_DECREF(list);
+            return NULL;
+        }
+
+        Py_DECREF(row);
+    }
+
+    return list;
+}
+
+static PyObject* anpCursorFetchMany(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
+{
+    AncInt32 fetchRows = 0;
+    static char*   keywordList[] = {"size", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "|i", keywordList, &fetchRows)) {
+        return NULL;
+    }
+
+    if (fetchRows <= 0) {
+        return anpRaiseExceptionFromString(anpInterfaceErrorException,
+               "The fetch size should be a number and greater than zero.");
+    }
+
+    return anpCursorFetch(cursor,fetchRows);
 }
 
 static PyObject* anpCursorFetchAll(AnpCursor* cursor, PyObject* args)
 {
-    return anpRaiseExceptionFromString(anpNotSupportedException, "fetchall() not implement");
+    return anpCursorFetch(cursor, 0);
 }
 
 static PyObject* anpCursorNextSet(AnpCursor* cursor, PyObject* args)

@@ -10,7 +10,7 @@ class TestCase(test_base.TestBaseCase):
         super().setUp()
         self.cursor.execute("drop table if exists test_cursor")
         self.cursor.execute("create table test_cursor(id int , name varchar(256))")
-    
+
 
     def test_select(self):
         self.cursor.execute("select 1 from dual")
@@ -62,7 +62,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("select * from v$session where sid=:id", (16,))
         row = self.cursor.fetchone()
         self.assertGreaterEqual(1, self.cursor.rowcount)
-    
+
     def test_cursor_rowcount(self):
         self.cursor.execute("truncate table test_cursor")
         data = [(1,1),(2,2),(3,3)]
@@ -76,6 +76,26 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(2, self.cursor.rowcount)
         row = self.cursor.fetchone()
         self.assertEqual(3, self.cursor.rowcount)
+
+    def test_cursor_fetchall(self):
+        self.cursor.execute("truncate table test_cursor")
+        data = [(1,1),(2,2),(3,3)]
+        self.cursor.execute("insert into test_cursor values(:1, :2)", (1,1))
+        self.cursor.execute("insert into test_cursor values(:1, :2)", (2,2))
+        self.cursor.execute("insert into test_cursor values(:1, :2)", (3,2))
+        self.cursor.execute("select * from test_cursor")
+        rows = self.cursor.fetchall()
+        self.assertEqual(3, self.cursor.rowcount)
+        self.assertEqual(3, len(rows))
+
+    def test_cursor_fetchmany(self):
+        self.cursor.execute("truncate table test_cursor")
+        for i in range(10):
+            self.cursor.execute("insert into test_cursor values(:1, :2)", (i,i))
+        self.cursor.execute("select * from test_cursor")
+        rows = self.cursor.fetchmany(5)
+        self.assertEqual(5, self.cursor.rowcount)
+        self.assertEqual(5, len(rows))
 
     def test_cursor_desc(self):
         self.cursor.execute(self.dropTable("t_python_desc"))
