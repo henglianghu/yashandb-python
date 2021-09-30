@@ -14,6 +14,7 @@ See [/doc].
 ## Tests
 
 See [/test].
+ python -m unittest test*.py
 
 ## License
 
