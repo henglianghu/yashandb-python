@@ -140,7 +140,15 @@ class TestCase(test_base.TestBaseCase):
         row = self.cursor.fetchone()
         assert(row[0] == 1)
 
-
+    def test_cursor_fetch_char(self):
+        self.cursor.execute("drop table if exists test_fetch_char")
+        self.cursor.execute("create table test_fetch_char(col1 varchar(20), col2 varchar(20))")
+        data = ('data1','data2')
+        self.cursor.execute("insert into test_fetch_char values(?,?)", data)
+        self.connection.commit()
+        self.cursor.execute("select * from test_fetch_char")
+        row = self.cursor.fetchone()
+        assert (row,data)
 
 if __name__ == "__main__":
     test_base.run_test_cases()
