@@ -142,7 +142,7 @@ static PyObject *anpVarToPython(AncType type, AncChar* data)
         case ANC_TYPE_NCHAR:
         case ANC_TYPE_VARCHAR:
         case ANC_TYPE_NVARCHAR:
-            result = PyBytes_FromString(data);
+            result = PyUnicode_FromString(data);
             break;
         default:
             snprintf(message, 120, "not support type %d", type);
