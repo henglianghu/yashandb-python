@@ -465,7 +465,7 @@ AncResult anpCursorPerformBind(AnpCursor* cursor)
         if (PyDict_Check(cursor->bindVariables)) {
             pos = 0;
             while (PyDict_Next(cursor->bindVariables, &pos, &key, &var)) {
-                if (anpBindVar((AnpVar*)var, cursor, key, 0) < 0) {
+                if (anpBindVar((AnpVar*)var, cursor, key, 1) < 0) {
                     return ANC_ERROR;
                 }
             }
@@ -473,7 +473,7 @@ AncResult anpCursorPerformBind(AnpCursor* cursor)
             for (i = 0; i < PyList_GET_SIZE(cursor->bindVariables); i++) {
                 var = PyList_GET_ITEM(cursor->bindVariables, i);
                 if (var != Py_None) {
-                    if (anpBindVar((AnpVar*)var, cursor, NULL, i) < 0) {
+                    if (anpBindVar((AnpVar*)var, cursor, NULL, i + 1) < 0) {
                         return ANC_ERROR;
                     }
                 }
