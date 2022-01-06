@@ -128,7 +128,7 @@ class TestCase(test_base.TestBaseCase):
         self.assertRaisesRegex(yaspy.InterfaceError, 'not open', next, cur)
 
     def test_cursor_db_error(self):
-        self.assertRaisesRegex(yaspy.DatabaseError, "table or view SYS.TTTTTTTTTTTTT not found", self.cursor.execute, "select * from ttttttttttttt")
+        self.assertRaisesRegex(yaspy.DatabaseError, "table or view does not exist", self.cursor.execute, "select * from ttttttttttttt")
 
     def test_bind_insert_char(self):
         self.cursor.execute("drop table if exists test_char")
@@ -149,6 +149,11 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("select * from test_fetch_char")
         row = self.cursor.fetchone()
         assert (row,data)
+
+    def test_bug_892(self):
+        self.cursor.execute("select * from v$instance")
+        row = self.cursor.fetchone()
+        self.assertEqual(row[0], "OPEN")
 
 if __name__ == "__main__":
     test_base.run_test_cases()

@@ -1,5 +1,9 @@
 #include "anp_var.h"
+#include "datetime.h"
 #include "anp_exception.h"
+
+PyTypeObject *anpPyTypeDate;
+PyTypeObject *anpPyTypeDateTime;
 
 static void anpVarFree(AnpVar *var)
 {
@@ -42,7 +46,14 @@ static PyTypeObject * anpPyTypeDecimal;
 AncResult anpInitDecimal()
 {
     PyObject *module;
-    // import the decimal module for decimal support
+
+    PyDateTime_IMPORT;
+    if (PyErr_Occurred()) {
+        return ANC_ERROR;
+    }
+    anpPyTypeDate = PyDateTimeAPI->DateType;
+    anpPyTypeDateTime = PyDateTimeAPI->DateTimeType;
+
     module = PyImport_ImportModule("decimal");
     if (module == NULL) {
         return ANC_ERROR;
@@ -109,6 +120,9 @@ static PyObject *anpVarToPython(AncType type, AncChar* data)
 {
     AncChar message[120];
     PyObject* result;
+    AncDate *date;
+    AncTimestamp *timestamp;
+    AncDateStruct ds;
 
     switch (type) {
         case ANC_TYPE_TINYINT:
@@ -136,8 +150,18 @@ static PyObject *anpVarToPython(AncType type, AncChar* data)
             break;
         }
         case ANC_TYPE_DATE:
-            result =  PyLong_FromLongLong(*(AncInt64*)data);
+            date = (AncDate *)data;
+            ancGetDateStruct(*date, &ds);
+            result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
             break;
+        case ANC_TYPE_TIMESTAMP:
+        case ANC_TYPE_TIMESTAMP_TZ:
+        case ANC_TYPE_TIMESTAMP_LTZ:
+            timestamp = (AncTimestamp*)data;
+            ancGetDateStruct(timestamp->stamp, &ds);
+            result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
+            break;
+ 
         case ANC_TYPE_CHAR:
         case ANC_TYPE_NCHAR:
         case ANC_TYPE_VARCHAR:
@@ -145,7 +169,7 @@ static PyObject *anpVarToPython(AncType type, AncChar* data)
             result = PyUnicode_FromString(data);
             break;
         default:
-            snprintf(message, 120, "not support type %d", type);
+            snprintf(message, 120, "not support type ccc %d", type);
             result = anpRaiseExceptionFromString(anpNotSupportedException, message);
             break;
     }
