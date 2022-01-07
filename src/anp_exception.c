@@ -22,10 +22,10 @@ static PyObject *anpErrorNew(PyTypeObject *type, PyObject *args,
                              PyObject *keywordArgs)
 {
     PyObject *message;
-    AncUint32 code;
+    YacUint32 code;
     AnpError *error;
-    AncUint32 line;
-    AncUint32 column;
+    YacUint32 line;
+    YacUint32 column;
 
     if (!PyArg_ParseTuple(args, "OIII", &message, &code, &line, &column)) {
         return NULL;
@@ -93,61 +93,61 @@ PyTypeObject anpPyTypeError = {
         .tp_new = anpErrorNew
 };
 
-AncResult anpRegisterException(PyObject *module)
+YacResult anpRegisterException(PyObject *module)
 {
     PyType_Ready(&anpPyTypeError);
 
     // create exception object and add it to the dictionary
     if (anpModuleSetException(module, &anpErrorException,
                               "Error", NULL) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpWarningException,
                               "Warning", NULL) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpInterfaceErrorException,
                               "InterfaceError", anpErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpDatabaseErrorException,
                               "DatabaseError", anpErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpInternalErrorException,
                               "InternalError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpOperationalErrorException,
                               "OperationalError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpProgrammingErrorException,
                               "ProgrammingError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpIntegrityErrorException,
                               "IntegrityError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpDataErrorException,
                               "DataError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
     if (anpModuleSetException(module, &anpNotSupportedException,
                               "NotSupportedError", anpDatabaseErrorException) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
 
     Py_INCREF(&anpPyTypeError);
     if (PyModule_AddObject(module, "_Error", (PyObject*) &anpPyTypeError) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
 
-    return ANC_SUCCESS;
+    return YAC_SUCCESS;
 }
 
-int anpRaiseExceptionFromInfo(AncUint32 code, const char * message, const char* sqlStat, AncTextPos *pos)
+int anpRaiseExceptionFromInfo(YacUint32 code, const char * message, const char* sqlStat, YacTextPos *pos)
 {
     PyObject *exceptionType;
     AnpError *error;
@@ -164,11 +164,11 @@ int anpRaiseExceptionFromInfo(AncUint32 code, const char * message, const char* 
 
 int anpRaiseAndReturnIntException(void)
 {
-    AncInt32   code;
-    AncTextPos pos;
-    AncChar*   message;
-    AncChar*   sqlStat;
-    ancGetLastError(&code, &message, &sqlStat, &pos);
+    YacInt32   code;
+    YacTextPos pos;
+    YacChar*   message;
+    YacChar*   sqlStat;
+    yacGetLastError(&code, &message, &sqlStat, &pos);
     return anpRaiseExceptionFromInfo(code, message, sqlStat, &pos);
 }
 
@@ -210,7 +210,7 @@ PyObject *anpRaiseAndReturnNullException(void)
     return NULL;
 }
 
-AnpError *anpExceptionNewFromInfo(AncUint32 code, const char * message, const char* sqlStat, AncTextPos *pos)
+AnpError *anpExceptionNewFromInfo(YacUint32 code, const char * message, const char* sqlStat, YacTextPos *pos)
 {
     AnpError* error;
 

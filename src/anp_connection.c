@@ -13,9 +13,9 @@ static void anpFreeConnection(AnpConnection *conn)
 {
     if (conn->hEnv != NULL) {
         Py_BEGIN_ALLOW_THREADS
-            ancFreeHandle(ANC_HANDLE_STMT, conn->hStmt);
-            ancFreeHandle(ANC_HANDLE_DBC, conn->hConn);
-            ancFreeHandle(ANC_HANDLE_ENV, conn->hEnv);
+            yacFreeHandle(YAC_HANDLE_STMT, conn->hStmt);
+            yacFreeHandle(YAC_HANDLE_DBC, conn->hConn);
+            yacFreeHandle(YAC_HANDLE_ENV, conn->hEnv);
         Py_END_ALLOW_THREADS
         conn->hEnv = NULL;
         conn->hConn = NULL;
@@ -67,11 +67,11 @@ static int anpConnectionInit(AnpConnection *conn, PyObject *args,
         return -1;
     }
 
-    if (ancAllocHandle(ANC_HANDLE_ENV, NULL, &conn->hEnv) != ANC_SUCCESS) {
+    if (yacAllocHandle(YAC_HANDLE_ENV, NULL, &conn->hEnv) != YAC_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
-    if (ancAllocHandle(ANC_HANDLE_DBC, conn->hEnv, &conn->hConn) != ANC_SUCCESS) {
-        ancFreeHandle(ANC_HANDLE_ENV, conn->hEnv);
+    if (yacAllocHandle(YAC_HANDLE_DBC, conn->hEnv, &conn->hConn) != YAC_SUCCESS) {
+        yacFreeHandle(YAC_HANDLE_ENV, conn->hEnv);
         conn->hEnv = NULL;
         return anpRaiseAndReturnIntException();
     }
@@ -79,24 +79,24 @@ static int anpConnectionInit(AnpConnection *conn, PyObject *args,
     conn->username = PyUnicode_FromString(user);
     conn->dsn = PyUnicode_FromString(dsn);
 
-    AncResult res;
+    YacResult res;
     Py_BEGIN_ALLOW_THREADS
-        res = ancConnect(conn->hConn, dsn, user, password);
+        res = yacConnect(conn->hConn, dsn, user, password);
     Py_END_ALLOW_THREADS
 
-    if (res != ANC_SUCCESS)
+    if (res != YAC_SUCCESS)
     {
-        ancFreeHandle(ANC_HANDLE_DBC, conn->hConn);
+        yacFreeHandle(YAC_HANDLE_DBC, conn->hConn);
         conn->hConn = NULL;
-        ancFreeHandle(ANC_HANDLE_ENV, conn->hEnv);
+        yacFreeHandle(YAC_HANDLE_ENV, conn->hEnv);
         conn->hEnv = NULL;
         return anpRaiseAndReturnIntException();
     }
 
-    if (ancAllocHandle(ANC_HANDLE_STMT, conn->hConn, &conn->hStmt) != ANC_SUCCESS) {
-        ancFreeHandle(ANC_HANDLE_DBC, conn->hConn);
+    if (yacAllocHandle(YAC_HANDLE_STMT, conn->hConn, &conn->hStmt) != YAC_SUCCESS) {
+        yacFreeHandle(YAC_HANDLE_DBC, conn->hConn);
         conn->hConn = NULL;
-        ancFreeHandle(ANC_HANDLE_ENV, conn->hEnv);
+        yacFreeHandle(YAC_HANDLE_ENV, conn->hEnv);
         conn->hEnv = NULL;
         return anpRaiseAndReturnIntException();
     }
@@ -110,18 +110,18 @@ static PyObject *anpConnectionClose(AnpConnection *conn, PyObject *args)
         return anpRaiseAndReturnNullException();
     }
     if (conn->hStmt != NULL) {
-        ancFreeHandle(ANC_HANDLE_STMT, conn->hStmt);
+        yacFreeHandle(YAC_HANDLE_STMT, conn->hStmt);
         conn->hStmt = NULL;
     }
     if (conn->hConn != NULL) {
         Py_BEGIN_ALLOW_THREADS
-            ancDisconnect(conn->hConn);
+            yacDisconnect(conn->hConn);
         Py_END_ALLOW_THREADS
-        ancFreeHandle(ANC_HANDLE_DBC, conn->hConn);
+        yacFreeHandle(YAC_HANDLE_DBC, conn->hConn);
         conn->hConn = NULL;
     }
     if (conn->hEnv != NULL) {
-        ancFreeHandle(ANC_HANDLE_ENV, conn->hEnv);
+        yacFreeHandle(YAC_HANDLE_ENV, conn->hEnv);
         conn->hEnv = NULL;
     }
     Py_RETURN_NONE;
@@ -129,7 +129,7 @@ static PyObject *anpConnectionClose(AnpConnection *conn, PyObject *args)
 
 static PyObject *anpConnectionCommit(AnpConnection *conn, PyObject *args)
 {
-    AncResult ret;
+    YacResult ret;
     if (!anpConnectionIsConnected(conn)) {
         return anpRaiseAndReturnNullException();
     }
@@ -138,9 +138,9 @@ static PyObject *anpConnectionCommit(AnpConnection *conn, PyObject *args)
     }
     
     Py_BEGIN_ALLOW_THREADS
-    ret = ancCommit(conn->hConn);
+    ret = yacCommit(conn->hConn);
     Py_END_ALLOW_THREADS
-    if (ret != ANC_SUCCESS) {
+    if (ret != YAC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     Py_RETURN_NONE;
@@ -148,7 +148,7 @@ static PyObject *anpConnectionCommit(AnpConnection *conn, PyObject *args)
 
 static PyObject *anpConnectionRollback(AnpConnection *conn, PyObject *args)
 {
-    AncResult ret;
+    YacResult ret;
     if (!anpConnectionIsConnected(conn)) {
         return anpRaiseAndReturnNullException();
     }
@@ -156,9 +156,9 @@ static PyObject *anpConnectionRollback(AnpConnection *conn, PyObject *args)
         return anpRaiseExceptionFromString(anpNotSupportedException, "Cannot rollback when autocommit is enabled.");
     }
     Py_BEGIN_ALLOW_THREADS
-    ret = ancRollback(conn->hConn);
+    ret = yacRollback(conn->hConn);
     Py_END_ALLOW_THREADS
-    if (ret != ANC_SUCCESS) {
+    if (ret != YAC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     Py_RETURN_NONE;
@@ -193,18 +193,18 @@ static PyObject *anpConnectionNewCursor(AnpConnection *conn, PyObject *args,
     return result;
 }
 
-AncBool anpConnectionIsConnected(AnpConnection *conn)
+YacBool anpConnectionIsConnected(AnpConnection *conn)
 {
     if (conn->hConn == NULL) {
         anpRaiseExceptionFromString(anpInterfaceErrorException, "not connected");
-        return ANC_FALSE;
+        return YAC_FALSE;
     }
-    return ANC_TRUE;
+    return YAC_TRUE;
 }
 
 static PyObject *anpGetAutoCommit(AnpConnection *conn, void *unused)
 {
-    if(ancGetConnAttr(conn->hConn, ANC_ATTR_AUTOCOMMIT, &conn->autocommit, sizeof(conn->autocommit)) != ANC_SUCCESS) {
+    if(yacGetConnAttr(conn->hConn, YAC_ATTR_AUTOCOMMIT, &conn->autocommit, sizeof(conn->autocommit)) != YAC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
 
@@ -225,8 +225,8 @@ static int anpSetAutoCommit(AnpConnection *conn, PyObject *value, void *closure)
     }
     conn->autocommit =  (value == Py_True);
     Py_INCREF(value);
-    AncInt32 aCommit = conn->autocommit;
-    if (ancSetConnAttr(conn->hConn, ANC_ATTR_AUTOCOMMIT, &aCommit, sizeof(aCommit)) != ANC_SUCCESS) {
+    YacInt32 aCommit = conn->autocommit;
+    if (yacSetConnAttr(conn->hConn, YAC_ATTR_AUTOCOMMIT, &aCommit, sizeof(aCommit)) != YAC_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
 
@@ -266,19 +266,19 @@ PyTypeObject anchorPyTypeConnection = {
         .tp_new = (newfunc) anpNewConnection,
 };
 
-AncResult anpRegistConnection(PyObject* module)
+YacResult anpRegistConnection(PyObject* module)
 {
     PyType_Ready(&anchorPyTypeConnection);
 
     Py_INCREF(&anchorPyTypeConnection);
     if (PyModule_AddObject(module, "Connection", (PyObject*) &anchorPyTypeConnection) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
 
 
     Py_INCREF(&anchorPyTypeConnection);
     if (PyModule_AddObject(module, "connect", (PyObject*) &anchorPyTypeConnection) < 0) {
-        return ANC_ERROR;
+        return YAC_ERROR;
     }
-    return ANC_SUCCESS;
+    return YAC_SUCCESS;
 }
