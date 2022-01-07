@@ -31,7 +31,7 @@ PyInit_yaspy(void)
 {
     PyObject *module;
     
-    if (anpInitDecimal() != ANC_SUCCESS){
+    if (anpInitDecimal() != YAC_SUCCESS){
         return NULL;
     }
 
@@ -56,16 +56,16 @@ PyInit_yaspy(void)
         return NULL;
     }
 
-    if (anpRegistConnection(module) != ANC_SUCCESS) {
+    if (anpRegistConnection(module) != YAC_SUCCESS) {
         return NULL;
     }
-    if (anpRegistCursor(module) != ANC_SUCCESS) {
+    if (anpRegistCursor(module) != YAC_SUCCESS) {
         return NULL;
     }
-    if (anpRegisterException(module) != ANC_SUCCESS) {
+    if (anpRegisterException(module) != YAC_SUCCESS) {
         return NULL;
     }
-    if (anpRegisteVarObject(module)!= ANC_SUCCESS) {
+    if (anpRegisteVarObject(module)!= YAC_SUCCESS) {
         return NULL;
     }
 

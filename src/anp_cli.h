@@ -3,12 +3,12 @@
 
 #include "yacli.h"
 
-#define ANC_TRUE true
-#define ANC_FALSE false
+#define YAC_TRUE true
+#define YAC_FALSE false
 
-static inline AncUint32 codSizeAlign4(AncUint32 size)
+static inline YacUint32 codSizeAlign4(YacUint32 size)
 {
-    AncUint32 margin = (size & (AncUint32)0x03);
+    YacUint32 margin = (size & (YacUint32)0x03);
     return (margin == 0) ? size : size + (4 - margin);
 }
 

@@ -6,9 +6,9 @@
 
 typedef struct StAnpError {
     PyObject_HEAD
-    AncInt32 code;
-    AncUint32 line;
-    AncUint32 column;
+    YacInt32 code;
+    YacUint32 line;
+    YacUint32 column;
     PyObject *message;
     PyObject *sqlStat;
 } AnpError;
@@ -24,11 +24,11 @@ extern PyObject *anpInternalErrorException;
 extern PyObject *anpProgrammingErrorException;
 extern PyObject *anpNotSupportedException;
 
-AncResult anpRegisterException(PyObject *module);
+YacResult anpRegisterException(PyObject *module);
 
-AnpError* anpExceptionNewFromInfo(AncUint32 code, const char * message, const char* sqlStat, AncTextPos *pos);
+AnpError* anpExceptionNewFromInfo(YacUint32 code, const char * message, const char* sqlStat, YacTextPos *pos);
 int       anpRaiseAndReturnIntException(void);
-int       anpRaiseExceptionFromInfo(AncUint32 code, const char * message, const char* sqlStat, AncTextPos *pos);
+int       anpRaiseExceptionFromInfo(YacUint32 code, const char * message, const char* sqlStat, YacTextPos *pos);
 PyObject* anpRaiseAndReturnNullException(void);
 PyObject* anpRaiseExceptionFromString(PyObject *exceptionType, const char *message);
 

@@ -7,17 +7,17 @@
 
 typedef struct {
     PyObject_HEAD
-    AncHandle hConn;
-    AncHandle hEnv;
-    AncHandle hStmt;
+    YacHandle hConn;
+    YacHandle hEnv;
+    YacHandle hStmt;
     PyObject *username;
     PyObject *dsn;
 
-    AncBool autocommit;
+    YacBool autocommit;
 } AnpConnection;
 
-AncResult anpRegistConnection(PyObject* module);
-AncBool anpConnectionIsConnected(AnpConnection *conn);
+YacResult anpRegistConnection(PyObject* module);
+YacBool anpConnectionIsConnected(AnpConnection *conn);
 
 extern PyTypeObject anchorPyTypeConnection;
 #endif //ANCHOR_ANP_CONNECTION_H
