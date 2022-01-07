@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 
 #define the version
-BUILD_VERSION = "0.1.4"
+BUILD_VERSION = "0.1.5"
 
 apmodule = Extension('yaspy',
                     sources = ['src/anp_cli.c',

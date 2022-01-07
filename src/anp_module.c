@@ -6,8 +6,8 @@
 #include "anp_cursor.h"
 #include "anp_var.h"
 
-PyTypeObject *anpPyTypeDate;
-PyTypeObject *anpPyTypeDateTime;
+extern PyTypeObject *anpPyTypeDate;
+extern PyTypeObject *anpPyTypeDateTime;
 
 static PyMethodDef AnchorMethods[] = {
     { NULL }
@@ -31,9 +31,6 @@ PyInit_yaspy(void)
 {
     PyObject *module;
     
-    PyDateTime_IMPORT;
-    anpPyTypeDate = PyDateTimeAPI->DateType;
-    anpPyTypeDateTime = PyDateTimeAPI->DateTimeType;
     if (anpInitDecimal() != ANC_SUCCESS){
         return NULL;
     }
