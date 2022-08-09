@@ -571,12 +571,13 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         // prepare the statement, if applicable
         YacChar * sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
         Py_BEGIN_ALLOW_THREADS
-        status = yacPrepare(cursor->hStmt, sql);
+        status = yacPrepare(cursor->hStmt, sql, strlen(sql));
         Py_END_ALLOW_THREADS
         if (status != YAC_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
-        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType)) != YAC_SUCCESS) {
+        YacInt32 len;
+        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAC_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
     }
@@ -606,7 +607,8 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
             Py_RETURN_NONE;
         }
         // get the count of the rows affected
-        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(YacUint64))
+        YacInt32 len;
+        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(YacUint64), &len)
             != YAC_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
