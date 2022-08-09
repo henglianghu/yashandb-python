@@ -193,7 +193,7 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         anpRaiseExceptionFromString(anpNotSupportedException, "not support bind by name");
         return -1;
     }
-    if (yacBindParameter(cursor->hStmt, pos, YAC_PARAM_INPUT, var->dbType, var->data, var->size, var->indicator) !=
+    if (yacBindParameter(cursor->hStmt, pos, YAC_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
         YAC_SUCCESS) {
         return -1;
     }

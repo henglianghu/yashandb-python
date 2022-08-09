@@ -81,7 +81,7 @@ static int anpConnectionInit(AnpConnection *conn, PyObject *args,
 
     YacResult res;
     Py_BEGIN_ALLOW_THREADS
-        res = yacConnect(conn->hConn, dsn, user, password);
+        res = yacConnect(conn->hConn, dsn, strlen(dsn), user, strlen(user), password, strlen(password));
     Py_END_ALLOW_THREADS
 
     if (res != YAC_SUCCESS)
@@ -204,7 +204,8 @@ YacBool anpConnectionIsConnected(AnpConnection *conn)
 
 static PyObject *anpGetAutoCommit(AnpConnection *conn, void *unused)
 {
-    if(yacGetConnAttr(conn->hConn, YAC_ATTR_AUTOCOMMIT, &conn->autocommit, sizeof(conn->autocommit)) != YAC_SUCCESS) {
+    YacInt32 len;
+    if(yacGetConnAttr(conn->hConn, YAC_ATTR_AUTOCOMMIT, &conn->autocommit, sizeof(conn->autocommit), &len) != YAC_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
 
