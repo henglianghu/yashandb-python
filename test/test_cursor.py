@@ -1,3 +1,4 @@
+import datetime
 from decimal import Decimal
 
 import test_base
@@ -154,6 +155,27 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("select * from v$instance")
         row = self.cursor.fetchone()
         self.assertEqual(row[0], "OPEN")
+
+    def test_date_datatype(self):
+        self.cursor.execute("drop table if exists test_date_1")
+        self.cursor.execute("create table test_date_1(id int,c1 date)")
+        self.cursor.execute("insert into test_date_1 values(1,'2000-10-10')")
+        self.cursor.execute("select * from test_date_1")
+        row = self.cursor.fetchone()
+        self.assertEqual(row[1], datetime.datetime(2000, 10, 10, 0, 0))
+        self.cursor.execute("drop table if exists test_date_1")
+        self.cursor.execute("create table test_date_1(id int,c1 time)")
+        self.cursor.execute("insert into test_date_1 values(2,'11:11:11')")
+        self.cursor.execute("select * from test_date_1")
+        row = self.cursor.fetchone()
+        self.assertEqual(row[1], datetime.time(11, 11, 11))
+        self.cursor.execute("drop table if exists test_date_1")
+        self.cursor.execute("create table test_date_1(id int,c1 timestamp)")
+        self.cursor.execute("insert into test_date_1 values(2,'2022-2-2 11:11:11')")
+        self.cursor.execute("select * from test_date_1")
+        row = self.cursor.fetchone()
+        self.assertEqual(row[1], datetime.datetime(2022, 2, 2, 11, 11, 11))
+        self.cursor.execute("drop table if exists test_varchar_1")
 
 if __name__ == "__main__":
     test_base.run_test_cases()

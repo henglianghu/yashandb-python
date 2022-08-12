@@ -121,6 +121,7 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
     YacChar message[120];
     PyObject* result;
     YacDate *date;
+    YacShortTime* time;
     YacTimestamp *timestamp;
     YacDateStruct ds;
 
@@ -153,6 +154,11 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
             date = (YacDate *)data;
             yacGetDateStruct(*date, &ds);
             result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
+            break;
+        case YAC_TYPE_SHORTTIME:
+            time = (YacShortTime *)data;
+            yacGetDateStruct(*time, &ds);
+            result = PyTime_FromTime(ds.hour, ds.minute, ds.second, ds.fraction/1000);
             break;
         case YAC_TYPE_TIMESTAMP:
         case YAC_TYPE_TIMESTAMP_TZ:
