@@ -439,7 +439,7 @@ void anpGetColumnSize(YacColumnDesc* desc, YacUint32* bindSize)
             break;
 
         case YAC_TYPE_ROWID:
-            *bindSize = 24;
+            *bindSize = 44;
             break;
 
         default:
