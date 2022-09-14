@@ -29,3 +29,6 @@ class TestBaseCase(unittest.TestCase):
     def dropTable(self, name):
         sql = "drop table if exists " + name
         return sql
+
+def run_test_cases():
+    unittest.main(testRunner=unittest.TextTestRunner(verbosity=2))

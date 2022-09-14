@@ -43,41 +43,41 @@ PyTypeObject anchorPyTypeVar = {
 
 static PyTypeObject * anpPyTypeDecimal;
 
-YacResult anpInitDecimal()
+YapiResult anpInitDecimal()
 {
     PyObject *module;
 
     PyDateTime_IMPORT;
     if (PyErr_Occurred()) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
     anpPyTypeDate = PyDateTimeAPI->DateType;
     anpPyTypeDateTime = PyDateTimeAPI->DateTimeType;
 
     module = PyImport_ImportModule("decimal");
     if (module == NULL) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
     anpPyTypeDecimal = (PyTypeObject*) PyObject_GetAttrString(module, "Decimal");
     Py_DECREF(module);
     if (anpPyTypeDecimal == NULL) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
 
-YacResult anpRegisteVarObject(PyObject* module)
+YapiResult anpRegisteVarObject(PyObject* module)
 {
     PyType_Ready(&anchorPyTypeVar);
 
     Py_INCREF(&anchorPyTypeVar);
     if (PyModule_AddObject(module, "Var", (PyObject*) &anchorPyTypeVar) < 0) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
 
-AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ssize_t size, YacBool isArray)
+AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_ssize_t size, bool isArray)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
     if (var == NULL) {
@@ -87,13 +87,13 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
     Py_INCREF(cursor->connection);
     var->connection = cursor->connection;
 
-    var->size = (YacUint32)size;
-    var->elements = (YacUint32)numElements;
+    var->size = (uint32_t)size;
+    var->elements = (uint32_t)numElements;
     var->isArray = isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
-    if(type == YAC_TYPE_NUMBER || type == YAC_TYPE_ROWID){
-        var->transType = YAC_TYPE_VARCHAR;
+    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_ROWID){
+        var->transType = YAPI_TYPE_VARCHAR;
     } else {
         var->transType = type;
     }
@@ -102,7 +102,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
         Py_DECREF(var);
         return (AnpVar*)PyErr_NoMemory();
     }
-    var->indicator = PyMem_Malloc(var->elements * sizeof(YacInt32));
+    var->indicator = PyMem_Malloc(var->elements * sizeof(int32_t));
     if (var->indicator == NULL) {
         Py_DECREF(var);
         return (AnpVar*)PyErr_NoMemory();
@@ -111,68 +111,68 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
     return var;
 }
 
-YacBool anpCheckVar(PyObject* object)
+bool anpCheckVar(PyObject* object)
 {
     return (Py_TYPE(object) == &anchorPyTypeVar);
 }
 
-static PyObject *anpVarToPython(YacType type, YacChar* data)
+static PyObject *anpVarToPython(YapiType type, char* data)
 {
-    YacChar message[120];
+    char message[120];
     PyObject* result;
-    YacDate *date;
-    YacShortTime* time;
-    YacTimestamp *timestamp;
-    YacDateStruct ds;
+    YapiDate *date;
+    YapiShortTime* time;
+    YapiTimestamp *timestamp;
+    YapiDateStruct ds;
 
     switch (type) {
-        case YAC_TYPE_TINYINT:
-            result = PyLong_FromLong(*(YacInt8*)data);
+        case YAPI_TYPE_TINYINT:
+            result = PyLong_FromLong(*(int8_t*)data);
             break;
-        case YAC_TYPE_SMALLINT:
-            result = PyLong_FromLong(*(YacInt16*)data);
+        case YAPI_TYPE_SMALLINT:
+            result = PyLong_FromLong(*(int16_t*)data);
             break;
-        case YAC_TYPE_INTEGER:
-            result =  PyLong_FromLong(*(YacInt32*)data);
+        case YAPI_TYPE_INTEGER:
+            result =  PyLong_FromLong(*(int32_t*)data);
             break;
-        case YAC_TYPE_BIGINT:
-            result =  PyLong_FromLongLong(*(YacInt64*)data);
+        case YAPI_TYPE_BIGINT:
+            result =  PyLong_FromLongLong(*(int64_t*)data);
             break;
-        case YAC_TYPE_FLOAT:
+        case YAPI_TYPE_FLOAT:
             result =  PyFloat_FromDouble(*(float *)data);
             break;
-        case YAC_TYPE_DOUBLE:
+        case YAPI_TYPE_DOUBLE:
             result =  PyFloat_FromDouble(*(double *)data);
             break;
-        case YAC_TYPE_NUMBER: {
+        case YAPI_TYPE_NUMBER: {
             PyObject* stringObj = PyUnicode_Decode(data, strlen(data), NULL, NULL);
             result = PyObject_CallFunctionObjArgs((PyObject*)anpPyTypeDecimal, stringObj, NULL);
             Py_DECREF(stringObj);
             break;
         }
-        case YAC_TYPE_DATE:
-            date = (YacDate *)data;
-            yacGetDateStruct(*date, &ds);
+        case YAPI_TYPE_DATE:
+            date = (YapiDate *)data;
+            yapiGetDateStruct(*date, &ds);
             result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
             break;
-        case YAC_TYPE_SHORTTIME:
-            time = (YacShortTime *)data;
-            yacGetDateStruct(*time, &ds);
+        case YAPI_TYPE_SHORTTIME:
+            time = (YapiShortTime *)data;
+            yapiGetDateStruct(*time, &ds);
             result = PyTime_FromTime(ds.hour, ds.minute, ds.second, ds.fraction/1000);
             break;
-        case YAC_TYPE_TIMESTAMP:
-        case YAC_TYPE_TIMESTAMP_TZ:
-        case YAC_TYPE_TIMESTAMP_LTZ:
-            timestamp = (YacTimestamp*)data;
-            yacGetDateStruct(timestamp->stamp, &ds);
+        case YAPI_TYPE_TIMESTAMP:
+        case YAPI_TYPE_TIMESTAMP_TZ:
+        case YAPI_TYPE_TIMESTAMP_LTZ:
+            timestamp = (YapiTimestamp*)data;
+            yapiGetDateStruct(timestamp->stamp, &ds);
             result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
             break;
  
-        case YAC_TYPE_CHAR:
-        case YAC_TYPE_NCHAR:
-        case YAC_TYPE_VARCHAR:
-        case YAC_TYPE_NVARCHAR:
-        case YAC_TYPE_ROWID:
+        case YAPI_TYPE_CHAR:
+        case YAPI_TYPE_NCHAR:
+        case YAPI_TYPE_VARCHAR:
+        case YAPI_TYPE_NVARCHAR:
+        case YAPI_TYPE_ROWID:
             result = PyUnicode_FromString(data);
             break;
         default:
@@ -183,12 +183,12 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
     return result;
 }
 
-PyObject* anpVarGetSingleValue(AnpVar* var, YacUint32 pos)
+PyObject* anpVarGetSingleValue(AnpVar* var, uint32_t pos)
 {
     if (pos > 1) {
         return anpRaiseExceptionFromString(anpNotSupportedException, "AnpVar not support multi value");
     }
-    if (var->indicator[pos] == YAC_NULL_DATA) {
+    if (var->indicator[pos] == YAPI_NULL_DATA) {
         Py_RETURN_NONE;
     }
     return anpVarToPython(var->dbType, var->data + pos * var->size);
@@ -200,8 +200,8 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         anpRaiseExceptionFromString(anpNotSupportedException, "not support bind by name");
         return -1;
     }
-    if (yacBindParameter(cursor->hStmt, pos, YAC_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
-        YAC_SUCCESS) {
+    if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
+        YAPI_SUCCESS) {
         return -1;
     }
     return 0;
@@ -210,12 +210,12 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
 int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
 {
     if (value == Py_None){
-        var->indicator[arrayPos] = YAC_NULL_DATA;
+        var->indicator[arrayPos] = YAPI_NULL_DATA;
     }
     if (PyBool_Check(value)) {
-        YacBool* b = (YacBool *)var->data;
+        bool* b = (bool *)var->data;
         b[arrayPos] = PyObject_IsTrue(value);
-        var->indicator[arrayPos] = (YacInt32)sizeof(YacBool);
+        var->indicator[arrayPos] = (int32_t)sizeof(bool);
         return 0;
     }
     if (PyUnicode_Check(value)) {
@@ -233,15 +233,15 @@ int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
         return 0;
     }
     if (PyLong_Check(value)) {
-        YacInt32 *iv = (YacInt32 *)var->data;
+        int32_t *iv = (int32_t *)var->data;
         iv[arrayPos] = PyLong_AsLong(value);
-        var->indicator[arrayPos] = (YacInt32)sizeof(YacInt64);
+        var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
         return 0;
     }
     if (PyFloat_Check(value)) {
         double *dv = (double *)var->data;
         dv[arrayPos] = PyFloat_AsDouble(value);
-        var->indicator[arrayPos] = (YacInt32)sizeof(double);
+        var->indicator[arrayPos] = (int32_t)sizeof(double);
         return 0;
     }
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
@@ -272,25 +272,25 @@ int anpGetSize(PyObject * value)
     return 0;
 }
 
-YacType anpGetType(PyObject * value)
+YapiType anpGetType(PyObject * value)
 {
     if (value == Py_None) {
         return 0;
     }
     if (PyBool_Check(value)) {
-        return YAC_TYPE_BOOL;
+        return YAPI_TYPE_BOOL;
     }
     if (PyUnicode_Check(value)) {
-        return YAC_TYPE_VARCHAR;
+        return YAPI_TYPE_VARCHAR;
     }
     if (PyBytes_Check(value)) {
-        return YAC_TYPE_VARCHAR;
+        return YAPI_TYPE_VARCHAR;
     }
     if (PyLong_Check(value)) {
-        return YAC_TYPE_INTEGER;
+        return YAPI_TYPE_INTEGER;
     }
     if (PyFloat_Check(value)) {
-        return YAC_TYPE_DOUBLE;
+        return YAPI_TYPE_DOUBLE;
     }
 
     return 0;
@@ -302,7 +302,7 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
     Py_ssize_t size = 0;
     Py_ssize_t i = 0;
     Py_ssize_t tempSize = 0;
-    YacType type = 0;
+    YapiType type = 0;
     char message[250];
 
     if (PyList_Check(value)) {
@@ -310,7 +310,7 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         for (i = 0; i < PyList_GET_SIZE(value); i++) {
             PyObject * obj = PyList_GET_ITEM(value, i);
 
-            YacType tmpType = anpGetType(obj);
+            YapiType tmpType = anpGetType(obj);
             if (type == 0) {
                 type = tmpType;
             } else if (type != tmpType) {

@@ -7,17 +7,16 @@
 
 typedef struct {
     PyObject_HEAD
-    YacHandle hConn;
-    YacHandle hEnv;
-    YacHandle hStmt;
+    YapiConnect *hConn;
     PyObject *username;
     PyObject *dsn;
 
-    YacBool autocommit;
+    bool autocommit;
 } AnpConnection;
 
-YacResult anpRegistConnection(PyObject* module);
-YacBool anpConnectionIsConnected(AnpConnection *conn);
+YapiResult anpRegistConnection(PyObject* module);
+bool anpConnectionIsConnected(AnpConnection *conn);
 
 extern PyTypeObject anchorPyTypeConnection;
+
 #endif //ANCHOR_ANP_CONNECTION_H
