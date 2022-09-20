@@ -97,11 +97,37 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
     } else {
         var->transType = type;
     }
-    var->data = PyMem_Malloc(var->bufferSize);
-    if (var->data == NULL) {
-        Py_DECREF(var);
-        return (AnpVar*)PyErr_NoMemory();
+
+    if(type != YAC_TYPE_CLOB && type != YAC_TYPE_BLOB && size > 8000)
+    {
+        var->transType = type == YAC_TYPE_BINARY ? YAC_TYPE_BLOB : YAC_TYPE_CLOB;
+        var->dbType = var->transType;
     }
+    
+    if (var->transType == YAC_TYPE_CLOB || var->transType == YAC_TYPE_BLOB)
+    {
+        var->size = -1;
+        YacLobLocator* loc;
+        if (yacLobDescAlloc((YacHandle)var->connection->hConn, var->transType, (YacHandle*)&loc) != YAC_SUCCESS)
+        {
+            return (AnpVar*)anpRaiseAndReturnNullException();
+        }
+        if (!cursor->fetchVariables)
+        {
+            if (yacLobCreateTemporary((YacHandle)var->connection->hConn, loc) != YAC_SUCCESS)
+            {
+                return (AnpVar*)anpRaiseAndReturnNullException();
+            }
+        }
+        var->data = loc;
+    } else {
+        var->data = PyMem_Malloc(var->bufferSize);
+        if (var->data == NULL) {
+            Py_DECREF(var);
+            return (AnpVar*)PyErr_NoMemory();
+        }
+    }
+
     var->indicator = PyMem_Malloc(var->elements * sizeof(YacInt32));
     if (var->indicator == NULL) {
         Py_DECREF(var);
@@ -116,7 +142,65 @@ YacBool anpCheckVar(PyObject* object)
     return (Py_TYPE(object) == &anchorPyTypeVar);
 }
 
-static PyObject *anpVarToPython(YacType type, YacChar* data)
+static YacResult anpLobBytes2Str(YacUint8* buf, YacUint64 len)
+{
+    len *= 2;
+    YacChar* strBuf = PyMem_Malloc(len);
+    if(strBuf == NULL)
+    {
+        return YAC_ERROR;
+    }
+    YacUint32 pos = 0;
+    YacUint32 index;
+    YacUint8  value;
+    for (YacUint32 i = 0; i < len; i++) {
+        index = i / 2;
+        value = pos % 8 ? buf[index] & 0xF : (buf[index] & 0xF0) >> 4;
+        strBuf[i] = value >= 10 ? value - 10 + 'A' : value + '0';
+        pos += 4;
+    }
+
+    memcpy(buf, strBuf, len);
+    buf[len] = '\0';
+    PyMem_Free(strBuf);
+    return YAC_SUCCESS;
+}
+
+static PyObject* anpGetLobData(YacHandle hConn, YacType type, YacChar* data)
+{
+    YacLobLocator* loc = (YacLobLocator*)data;
+    YacUint64 length;
+    yacLobGetLength(hConn, loc, &length);
+    if (type == YAC_TYPE_BLOB)
+    {
+        length *= 2;
+    }
+    
+    YacChar* readBuf = PyMem_Malloc(length);
+    if (readBuf == NULL)
+    {
+        return (AnpVar*)PyErr_NoMemory();
+    }
+    readBuf[length] = '\0';
+    
+    if (yacLobRead(hConn, loc, &length, (YacUint8*)readBuf, length) != YAC_SUCCESS)
+    {
+        return anpRaiseAndReturnNullException();
+    }
+    
+    if (type == YAC_TYPE_BLOB)
+    {
+        if (anpLobBytes2Str((YacUint8*)readBuf, length) != YAC_SUCCESS)
+        {
+            return anpRaiseAndReturnNullException();
+        }
+    }
+    AnpVar* var =  PyUnicode_FromString((YacChar*)readBuf);
+    PyMem_Free(readBuf);
+    return var;
+}
+
+static PyObject *anpVarToPython(YacHandle hConn, YacType type, YacChar* data)
 {
     YacChar message[120];
     PyObject* result;
@@ -124,7 +208,7 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
     YacShortTime* time;
     YacTimestamp *timestamp;
     YacDateStruct ds;
-
+    
     switch (type) {
         case YAC_TYPE_TINYINT:
             result = PyLong_FromLong(*(YacInt8*)data);
@@ -175,6 +259,10 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
         case YAC_TYPE_ROWID:
             result = PyUnicode_FromString(data);
             break;
+        case YAC_TYPE_CLOB:
+        case YAC_TYPE_BLOB:
+            result = anpGetLobData(hConn, type, data);
+            break;
         default:
             snprintf(message, 120, "not support type %d", type);
             result = anpRaiseExceptionFromString(anpNotSupportedException, message);
@@ -183,15 +271,15 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
     return result;
 }
 
-PyObject* anpVarGetSingleValue(AnpVar* var, YacUint32 pos)
+PyObject* anpVarGetSingleValue(YacHandle hConn, AnpVar* var, YacUint32 pos)
 {
     if (pos > 1) {
         return anpRaiseExceptionFromString(anpNotSupportedException, "AnpVar not support multi value");
     }
-    if (var->indicator[pos] == YAC_NULL_DATA) {
+    if ((YacUint32)var->indicator[pos] == YAC_NULL_DATA) {
         Py_RETURN_NONE;
     }
-    return anpVarToPython(var->dbType, var->data + pos * var->size);
+    return anpVarToPython(hConn, var->dbType, var->data + pos * var->size);
 }
 
 int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
@@ -200,6 +288,16 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         anpRaiseExceptionFromString(anpNotSupportedException, "not support bind by name");
         return -1;
     }
+
+    if (var->dbType == YAC_TYPE_BLOB || var->dbType == YAC_TYPE_CLOB)
+    {
+        if (yacBindParameter(cursor->hStmt, pos, YAC_PARAM_INPUT, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
+        YAC_SUCCESS) {
+        return -1;
+        }
+        return 0;
+    }
+
     if (yacBindParameter(cursor->hStmt, pos, YAC_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
         YAC_SUCCESS) {
         return -1;
@@ -207,7 +305,7 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     return 0;
 }
 
-int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
+int anpVarSetValue(YacHandle hConn, AnpVar* var, uint32_t arrayPos, PyObject* value)
 {
     if (value == Py_None){
         var->indicator[arrayPos] = YAC_NULL_DATA;
@@ -223,13 +321,36 @@ int anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value)
         if (tmp == NULL) {
             return -1;
         }
-        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(tmp));
-        var->indicator[arrayPos] = (int)PyUnicode_GET_LENGTH(value);
+
+        if (var->transType == YAC_TYPE_CLOB || var->transType == YAC_TYPE_BLOB)
+        {
+             if (yacLobWrite(hConn, (YacLobLocator*)var->data, NULL, 
+                        (YacUint8*)PyBytes_AS_STRING(tmp), (int)PyUnicode_GET_LENGTH(value)) != YAC_SUCCESS)
+             {
+                return -1;
+             }
+             var->indicator[arrayPos] = NULL;
+             return 0;
+        } else {
+            strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(tmp));
+            var->indicator[arrayPos] = (int)PyUnicode_GET_LENGTH(value);
+        }
         return 0;
     }
     if (PyBytes_Check(value)) {
-        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
-        var->indicator[arrayPos] = (int)PyBytes_GET_SIZE(value);
+        if (var->transType == YAC_TYPE_BLOB)
+        {
+             if (yacLobWrite(hConn, (YacLobLocator*)var->data, NULL, 
+                        (YacUint8*)value, (int)PyUnicode_GET_LENGTH(value)) != YAC_SUCCESS)
+             {
+                return -1;
+             }
+             var->indicator[arrayPos] = NULL;
+             return 0;
+        } else {
+            strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
+            var->indicator[arrayPos] = (int)PyBytes_GET_SIZE(value);
+        }
         return 0;
     }
     if (PyLong_Check(value)) {
@@ -296,6 +417,17 @@ YacType anpGetType(PyObject * value)
     return 0;
 }
 
+void anpAdjustVarTypeSize(Py_ssize_t* size,YacType type)
+{
+    if (type != YAC_TYPE_VARCHAR) {
+        return ;
+    }
+
+    if (*size <= 8000) {
+        *size = 8000;
+    } 
+}
+
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements)
 {
     int isArray = 0;
@@ -328,6 +460,7 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         size = anpGetSize(value);
         type = anpGetType(value);
     }
-
+    
+    anpAdjustVarTypeSize(&size, type);
     return anpNewVar(cursor, numElements, type, size, isArray);
 }

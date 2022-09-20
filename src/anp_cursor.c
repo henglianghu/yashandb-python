@@ -227,6 +227,9 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
 
         varToSet = origVar;
         if (numElements >= origVar->elements) {
+            if (anpGetSize(value) > 8000) {
+                origVar->size = anpGetSize(value);
+            }
             *newVar = anpNewVar(cursor, numElements, origVar->dbType, origVar->size, origVar->isArray);
             if (!*newVar) {
                 return YAC_ERROR;
@@ -235,7 +238,7 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
         }
 
         // attempt to set the value
-        if (varToSet && anpVarSetValue(varToSet, arrayPos, value) < 0) {
+        if (varToSet && anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
             // executemany() should simply fail after the first element
             if (arrayPos > 0) {
                 return YAC_ERROR;
@@ -262,7 +265,7 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
             if (*newVar == NULL) {
                 return YAC_ERROR;
             }
-            if (anpVarSetValue(*newVar, arrayPos, value) < 0) {
+            if (anpVarSetValue(cursor->connection->hConn, *newVar, arrayPos, value) < 0) {
                 Py_CLEAR(*newVar);
                 return YAC_ERROR;
             }
@@ -393,12 +396,10 @@ void anpGetColumnSize(YacColumnDesc* desc, YacUint32* bindSize)
         case YAC_TYPE_VARCHAR:
         case YAC_TYPE_NCHAR:
         case YAC_TYPE_NVARCHAR:
-        case YAC_TYPE_CLOB:
             *bindSize = codSizeAlign4(desc->size) + 1;
             break;
 
         case YAC_TYPE_BINARY:
-        case YAC_TYPE_BLOB:
             *bindSize = codSizeAlign4(desc->size * 2);
             break;
 
@@ -442,6 +443,10 @@ void anpGetColumnSize(YacColumnDesc* desc, YacUint32* bindSize)
             *bindSize = 44;
             break;
 
+        case YAC_TYPE_BLOB:
+        case YAC_TYPE_CLOB:
+            *bindSize = -1;
+            break;
         default:
             *bindSize = 20;
             break;
@@ -480,7 +485,7 @@ YacResult anpCursorPerformBind(AnpCursor* cursor)
             }
         }
     }
-    return YAC_SUCCESS;
+    return YAC_SUCCESS; 
 }
 
 static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)
@@ -517,11 +522,44 @@ static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)
         }
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
+
+        if( var->transType == YAC_TYPE_CLOB || var->transType == YAC_TYPE_BLOB)
+        {
+            if (yacBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, var->indicator) != YAC_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
+            continue;
+        }
+
         if (yacBindColumn(cursor->hStmt, pos, var->transType, var->data, size, var->indicator) != YAC_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
     }
+    return 0;
+}
 
+static int anpTryReleaseLobLoc(AnpCursor* cursor)
+{
+    if (!cursor->bindVariables)
+    {
+        return YAC_SUCCESS;
+    }
+
+    YacUint32 bindNum = (YacUint32)PyList_GET_SIZE(cursor->bindVariables);
+    AnpVar* bindVar;
+    for (YacUint32 i = 0; i < bindNum; i++)
+    {
+        bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
+        if (bindVar->transType != YAC_TYPE_CLOB && bindVar->transType != YAC_TYPE_BLOB)
+        {
+            continue;
+        }
+
+        if (yacLobFreeTemporary(cursor->connection->hConn, (YacLobLocator*)bindVar->data) != YAC_SUCCESS)
+        {
+            return anpRaiseAndReturnIntException();
+        }
+    }
     return 0;
 }
 
@@ -601,6 +639,11 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
+    if (anpTryReleaseLobLoc(cursor) < 0)
+    {
+        return anpRaiseAndReturnNullException();
+    }
+
     if (numQueryColumns == 0) {
         if (cursor->sqlType >= YAC_SQLTYPE_CREATE_DATABASE) {
             cursor->rowCount = 1;
@@ -657,7 +700,7 @@ static PyObject* anpCursorCreateRow(AnpCursor* cursor, uint32_t pos)
     // acquire the value for each item
     for (i = 0; i < numItems; i++) {
         AnpVar* var = (AnpVar*)PyList_GET_ITEM(cursor->fetchVariables, i);
-        item = anpVarGetSingleValue(var, pos);
+        item = anpVarGetSingleValue(var->connection->hConn, var, pos);
         if (item == NULL) {
             Py_DECREF(tuple);
             return NULL;
