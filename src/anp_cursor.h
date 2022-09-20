@@ -20,6 +20,7 @@ typedef struct StAnpCursor {
     uint64_t rowCount;
 
     bool isOpen;
+    bool isFail;
 } AnpCursor;
 
 YapiResult anpRegistCursor(PyObject* module);
