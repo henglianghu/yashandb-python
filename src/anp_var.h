@@ -26,9 +26,10 @@ YapiResult anpInitDecimal();
 bool   anpCheckVar(PyObject* object);
 AnpVar*   anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_ssize_t size, bool isArray);
 int       anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos);
-PyObject* anpVarGetSingleValue(AnpVar* var, uint32_t pos);
+PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos);
 
-int     anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value);
+int     anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements);
+void anpAdjustVarTypeSize(PyObject* value, Py_ssize_t* size,YapiType* type);
 
 #endif  // ANCHOR_ANP_VAR_H
