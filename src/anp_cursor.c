@@ -226,7 +226,7 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
         }
 
         varToSet = origVar;
-        if (numElements > origVar->elements) {
+        if (numElements >= origVar->elements) {
             *newVar = anpNewVar(cursor, numElements, origVar->dbType, origVar->size, origVar->isArray);
             if (!*newVar) {
                 return YAC_ERROR;
