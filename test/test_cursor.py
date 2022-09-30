@@ -177,6 +177,29 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(row[1], datetime.datetime(2022, 2, 2, 11, 11, 11))
         self.cursor.execute("drop table if exists test_varchar_1")
 
+        
+    def test_fix_6443(self):
+        self.cursor.execute("drop table if exists test_fix_1")
+        self.cursor.execute("create table test_fix_1(c1 tinyint)")
+        values = ['-128', '127', '0', '0.00000000001', '127.001']
+        for value in values:
+            self.cursor.execute("insert into test_fix_1 values(?)", (value,))
+            self.cursor.execute("select * from test_fix_1")
+            self.connection.commit()
+            row = self.cursor.fetchone()
+            self.cursor.execute("delete from test_fix_1")
+        self.cursor.execute("drop table if exists test_fix_1")
+        
+    def test_fix_6456(self):
+        self.cursor.execute("drop table if exists test_fix_1")
+        self.cursor.execute("create table test_fix_1(c1 char(10))")
+        values = ['Null', 'abcd!@#$%']
+        for value in values:
+            self.cursor.execute("insert into test_fix_1 values(?)", (value,))
+            self.cursor.execute("select * from test_fix_1")
+            row = self.cursor.fetchone()
+        self.cursor.execute("drop table if exists test_fix_1")
+        
     def test_rowid(self):
         self.cursor.execute("drop table if exists test_rowid")
         self.cursor.execute("create table test_rowid(c1 int,c2 varchar(20))")
