@@ -177,5 +177,18 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(row[1], datetime.datetime(2022, 2, 2, 11, 11, 11))
         self.cursor.execute("drop table if exists test_varchar_1")
 
+    def test_rowid(self):
+        self.cursor.execute("drop table if exists test_rowid")
+        self.cursor.execute("create table test_rowid(c1 int,c2 varchar(20))")
+        data = (1, 'aaa')
+        self.cursor.execute("insert into test_rowid values(?,?)", data)
+        self.cursor.execute("select * from test_rowid")
+        row = self.cursor.fetchone()
+        self.cursor.execute("select rowid from test_rowid")
+        row = self.cursor.fetchone()
+        self.cursor.execute("select rowid,* from test_rowid")
+        row = self.cursor.fetchone()
+        self.cursor.execute("drop table if exists test_rowid")
+
 if __name__ == "__main__":
     test_base.run_test_cases()

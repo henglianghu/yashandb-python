@@ -92,7 +92,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
     var->isArray = isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
-    if(type == YAC_TYPE_NUMBER){
+    if(type == YAC_TYPE_NUMBER || type == YAC_TYPE_ROWID){
         var->transType = YAC_TYPE_VARCHAR;
     } else {
         var->transType = type;
@@ -172,6 +172,7 @@ static PyObject *anpVarToPython(YacType type, YacChar* data)
         case YAC_TYPE_NCHAR:
         case YAC_TYPE_VARCHAR:
         case YAC_TYPE_NVARCHAR:
+        case YAC_TYPE_ROWID:
             result = PyUnicode_FromString(data);
             break;
         default:
