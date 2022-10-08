@@ -5,8 +5,8 @@ class TestBaseCase(unittest.TestCase):
     need_connection = True
     host = "127.0.0.1"
     port = 1688
-    user = "sys"
-    passwd = "sys"
+    user = "regress"
+    passwd = "regress"
 
     def setUp(self):
         if self.need_connection:
