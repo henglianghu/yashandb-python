@@ -26,9 +26,10 @@ YacResult anpInitDecimal();
 YacBool   anpCheckVar(PyObject* object);
 AnpVar*   anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ssize_t size, YacBool isArray);
 int       anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos);
-PyObject* anpVarGetSingleValue(AnpVar* var, YacUint32 pos);
+PyObject* anpVarGetSingleValue(YacHandle hConn, AnpVar* var, YacUint32 pos);
 
-int     anpVarSetValue(AnpVar* var, uint32_t arrayPos, PyObject* value);
+int     anpVarSetValue(YacHandle hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements);
+int     anpGetSize(PyObject * value);
 
 #endif  // ANCHOR_ANP_VAR_H
