@@ -1,6 +1,5 @@
 #include "anp_module.h"
 #include <Python.h>
-#include "datetime.h"
 #include "anp_exception.h"
 #include "anp_connection.h"
 #include "anp_cursor.h"
@@ -8,6 +7,8 @@
 
 extern PyTypeObject *anpPyTypeDate;
 extern PyTypeObject *anpPyTypeDateTime;
+
+YapiEnv* anpEnv = NULL;
 
 static PyMethodDef AnchorMethods[] = {
     { NULL }
@@ -31,7 +32,7 @@ PyInit_yaspy(void)
 {
     PyObject *module;
     
-    if (anpInitDecimal() != YAC_SUCCESS){
+    if (anpInitDecimal() != YAPI_SUCCESS){
         return NULL;
     }
 
@@ -56,16 +57,16 @@ PyInit_yaspy(void)
         return NULL;
     }
 
-    if (anpRegistConnection(module) != YAC_SUCCESS) {
+    if (anpRegistConnection(module) != YAPI_SUCCESS) {
         return NULL;
     }
-    if (anpRegistCursor(module) != YAC_SUCCESS) {
+    if (anpRegistCursor(module) != YAPI_SUCCESS) {
         return NULL;
     }
-    if (anpRegisterException(module) != YAC_SUCCESS) {
+    if (anpRegisterException(module) != YAPI_SUCCESS) {
         return NULL;
     }
-    if (anpRegisteVarObject(module)!= YAC_SUCCESS) {
+    if (anpRegisteVarObject(module)!= YAPI_SUCCESS) {
         return NULL;
     }
 

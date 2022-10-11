@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include "anp_cli.h"
 
-
+extern YapiEnv* anpEnv;
 
 
 

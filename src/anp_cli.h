@@ -1,14 +1,13 @@
 #ifndef ANCHOR_ANP_CLI_H
 #define ANCHOR_ANP_CLI_H
 
-#include "yacli.h"
+#include "yacapi.h"
 
-#define YAC_TRUE true
-#define YAC_FALSE false
+extern YapiEnv* anpEnv;
 
-static inline YacUint32 codSizeAlign4(YacUint32 size)
+static inline uint32_t codSizeAlign4(uint32_t size)
 {
-    YacUint32 margin = (size & (YacUint32)0x03);
+    uint32_t margin = (size & (uint32_t)0x03);
     return (margin == 0) ? size : size + (4 - margin);
 }
 
