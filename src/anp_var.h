@@ -31,5 +31,6 @@ PyObject* anpVarGetSingleValue(YacHandle hConn, AnpVar* var, YacUint32 pos);
 int     anpVarSetValue(YacHandle hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements);
 int     anpGetSize(PyObject * value);
+void anpAdjustVarTypeSize(Py_ssize_t* size,YacType type);
 
 #endif  // ANCHOR_ANP_VAR_H

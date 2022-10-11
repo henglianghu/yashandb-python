@@ -227,7 +227,9 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
 
         varToSet = origVar;
         if (numElements >= origVar->elements) {
-            origVar->size = anpGetSize(value);
+            if (anpGetSize(value) > 8000) {
+                origVar->size = anpGetSize(value);
+            }
             *newVar = anpNewVar(cursor, numElements, origVar->dbType, origVar->size, origVar->isArray);
             if (!*newVar) {
                 return YAC_ERROR;
@@ -483,7 +485,7 @@ YacResult anpCursorPerformBind(AnpCursor* cursor)
             }
         }
     }
-    return YAC_SUCCESS;
+    return YAC_SUCCESS; 
 }
 
 static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)

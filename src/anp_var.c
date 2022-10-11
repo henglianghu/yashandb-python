@@ -98,7 +98,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ss
         var->transType = type;
     }
 
-    if(type != YAC_TYPE_CLOB && type != YAC_TYPE_BLOB && size > 32000)
+    if(type != YAC_TYPE_CLOB && type != YAC_TYPE_BLOB && size > 8000)
     {
         var->transType = type == YAC_TYPE_BINARY ? YAC_TYPE_BLOB : YAC_TYPE_CLOB;
         var->dbType = var->transType;
@@ -417,6 +417,17 @@ YacType anpGetType(PyObject * value)
     return 0;
 }
 
+void anpAdjustVarTypeSize(Py_ssize_t* size,YacType type)
+{
+    if (type != YAC_TYPE_VARCHAR) {
+        return ;
+    }
+
+    if (*size <= 8000) {
+        *size = 8000;
+    } 
+}
+
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements)
 {
     int isArray = 0;
@@ -449,6 +460,7 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         size = anpGetSize(value);
         type = anpGetType(value);
     }
-
+    
+    anpAdjustVarTypeSize(&size, type);
     return anpNewVar(cursor, numElements, type, size, isArray);
 }

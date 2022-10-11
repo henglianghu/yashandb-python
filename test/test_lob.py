@@ -1,4 +1,5 @@
 import random
+from sqlite3 import connect
 import test_base
 import yaspy
 
@@ -43,7 +44,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into test_lob_1 values(NULL, NULL)")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
-        self.cursor.execute("drop table if exists test_lob_1") 
+        self.cursor.execute("drop table if exists test_lob_1")
         self.cursor.execute("drop table if exists tb_python_blob_01_1")
         self.cursor.execute("create table tb_python_blob_01_1(col1 blob)")
         self.cursor.execute("insert into tb_python_blob_01_1 values('a')")
@@ -66,7 +67,7 @@ class TestCase(test_base.TestBaseCase):
         str1 = []
         for i in range(32001):
             str1.append(random.choice(seed))
-            StringS = ''.join(str1)
+            StringS = ''.join(str1) 
         try:
             self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (StringS,))
         except Exception as e:
@@ -74,9 +75,18 @@ class TestCase(test_base.TestBaseCase):
            if('illegal conversion from CLOB to BLOB' not in error):
              raise Exception('failed')
         self.cursor.execute("select col1 from tb_python_blob_01_1")
-        result=self.cursor.fetchall()
+        result=self.cursor.fetchone()
+        values = [b'', b'http://c.biancheng.net/python/']
+        for value in values:
+            try:
+                self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (value,))
+            except Exception as e:
+               error = str(e)
+               if('invalid hex number' not in error):
+                 raise Exception('failed')
+            self.cursor.execute("select col1 from tb_python_blob_01_1")
+            row = self.cursor.fetchone()
         self.cursor.execute("drop table tb_python_blob_01_1")
-        
         
     if __name__ == "__main__":
         test_base.run_test_cases()
