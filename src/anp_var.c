@@ -405,7 +405,7 @@ YacType anpGetType(PyObject * value)
         return YAC_TYPE_VARCHAR;
     }
     if (PyBytes_Check(value)) {
-        return YAC_TYPE_VARCHAR;
+        return YAC_TYPE_BINARY;
     }
     if (PyLong_Check(value)) {
         return YAC_TYPE_INTEGER;
