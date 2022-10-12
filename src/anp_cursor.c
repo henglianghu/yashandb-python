@@ -568,6 +568,9 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         // prepare the statement, if applicable
         char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
         Py_BEGIN_ALLOW_THREADS
+            if (cursor->hStmt != NULL) {
+                yapiReleaseStmt(cursor->hStmt);
+            }
             status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
         Py_END_ALLOW_THREADS
         if (status != YAPI_SUCCESS) {

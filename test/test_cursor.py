@@ -139,7 +139,7 @@ class TestCase(test_base.TestBaseCase):
         self.connection.commit()
         self.cursor.execute("select count(*) from test_char")
         row = self.cursor.fetchone()
-        assert(row[0] == 1)
+        self.assertEqual(row[0], 1)
 
     def test_cursor_fetch_char(self):
         self.cursor.execute("drop table if exists test_fetch_char")
@@ -149,7 +149,7 @@ class TestCase(test_base.TestBaseCase):
         self.connection.commit()
         self.cursor.execute("select * from test_fetch_char")
         row = self.cursor.fetchone()
-        assert (row,data)
+        self.assertEqual(row, data)
 
     def test_bug_892(self):
         self.cursor.execute("select * from v$instance")
@@ -211,6 +211,19 @@ class TestCase(test_base.TestBaseCase):
         row = self.cursor.fetchone()
         self.cursor.execute("select rowid,* from test_rowid")
         row = self.cursor.fetchone()
+        self.cursor.execute("drop table if exists test_rowid")
+
+    def test_reuse_cursor(self):
+        self.cursor.execute("drop table if exists test_reuse_stmt")
+        self.cursor.execute("create table test_reuse_stmt(c1 int,c2 varchar(20))")
+        self.cursor.execute("insert into test_reuse_stmt values(1, 'aaa')")
+
+        for i in range(1000):
+            self.cursor.execute("select * from test_reuse_stmt")
+            row = self.cursor.fetchone()
+            self.assertGreaterEqual(row[0], 1)
+            self.assertGreaterEqual(row[1], 'aaa')
+
         self.cursor.execute("drop table if exists test_rowid")
 
 if __name__ == "__main__":
