@@ -35,10 +35,9 @@ static void anpCursorFree(AnpCursor* cursor)
 {
     Py_CLEAR(cursor->fetchVariables);
     Py_CLEAR(cursor->bindVariables);
-    if (cursor->isOpen && cursor->hStmt != NULL) {
+    if (cursor->hStmt != NULL) {
         yapiReleaseStmt(cursor->hStmt);
         cursor->hStmt = NULL;
-        cursor->isOpen = YAPI_FALSE;
     }
 
     Py_CLEAR(cursor->connection);
@@ -568,6 +567,10 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         // prepare the statement, if applicable
         char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
         Py_BEGIN_ALLOW_THREADS
+            if (cursor->hStmt != NULL) {
+                yapiReleaseStmt(cursor->hStmt);
+                cursor->hStmt = NULL;
+            }
             status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
         Py_END_ALLOW_THREADS
         if (status != YAPI_SUCCESS) {

@@ -66,9 +66,9 @@ class TestCase(test_base.TestBaseCase):
 
     def test_repr_connection(self):
         conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
-        self.assertEquals(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
+        self.assertEqual(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
         conn.close()
-        self.assertEquals(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
+        self.assertEqual(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
     
     def test_empty_cursor(self):
         conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
