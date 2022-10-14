@@ -35,7 +35,7 @@ static void anpCursorFree(AnpCursor* cursor)
 {
     Py_CLEAR(cursor->fetchVariables);
     Py_CLEAR(cursor->bindVariables);
-    if (cursor->isOpen && cursor->connection->hConn != NULL) {
+    if (cursor->isOpen && cursor->hStmt != NULL) {
         yapiReleaseStmt(cursor->hStmt);
         cursor->hStmt = NULL;
         cursor->isOpen = YAPI_FALSE;
