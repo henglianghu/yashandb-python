@@ -225,6 +225,12 @@ class TestCase(test_base.TestBaseCase):
             self.assertGreaterEqual(row[1], 'aaa')
 
         self.cursor.execute("drop table if exists test_rowid")
+        
+    def test_fix_6906(self):
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
+        cursor = conn.cursor()
+        cursor.close()
+        conn.close()
 
 if __name__ == "__main__":
     test_base.run_test_cases()
