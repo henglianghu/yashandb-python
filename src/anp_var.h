@@ -9,28 +9,27 @@ typedef struct StAnpVar {
     PyObject_HEAD
     AnpConnection* connection;
 
-    YacUint32 elements;  // the number of allocated elements
-    YacUint32 size;      // the size of single element
-    YacUint32 bufferSize;
-    YacBool   isArray;
-    YacBool   isValueSet;
-    YacInt32* indicator;  // an array to  specify whether the var is NULL
-    YacChar*  data;
-    YacType   dbType;
-    YacType   transType;
+    uint32_t elements;  // the number of allocated elements
+    uint32_t size;      // the size of single element
+    uint32_t bufferSize;
+    bool   isArray;
+    bool   isValueSet;
+    int32_t* indicator;  // an array to  specify whether the var is NULL
+    char*  data;
+    YapiType   dbType;
+    YapiType   transType;
 } AnpVar;
 
-YacResult anpRegisteVarObject(PyObject* module);
-YacResult anpInitDecimal();
+YapiResult anpRegisteVarObject(PyObject* module);
+YapiResult anpInitDecimal();
 
-YacBool   anpCheckVar(PyObject* object);
-AnpVar*   anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YacType type, Py_ssize_t size, YacBool isArray);
+bool   anpCheckVar(PyObject* object);
+AnpVar*   anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_ssize_t size, bool isArray);
 int       anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos);
-PyObject* anpVarGetSingleValue(YacHandle hConn, AnpVar* var, YacUint32 pos);
+PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos);
 
-int     anpVarSetValue(YacHandle hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
+int     anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements);
-int     anpGetSize(PyObject * value);
-void anpAdjustVarTypeSize(Py_ssize_t* size,YacType type);
+void anpAdjustVarTypeSize(PyObject* value, Py_ssize_t* size,YapiType* type);
 
 #endif  // ANCHOR_ANP_VAR_H

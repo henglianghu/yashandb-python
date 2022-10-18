@@ -1,0 +1,3 @@
+[submodule "yacapi"]
+	path = yacapi
+	url = git@git.yasdb.com:cod-x/yacapi.git

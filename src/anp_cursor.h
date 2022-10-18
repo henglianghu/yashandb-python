@@ -7,21 +7,22 @@
 
 typedef struct StAnpCursor {
     PyObject_HEAD
-    YacHandle hStmt;
+    YapiStmt* hStmt;
     AnpConnection *connection;
     PyObject *bindVariables;
     PyObject* fetchVariables;
     PyObject* statment;
 
-    YacUint32 sqlType;
-    YacUint32 arraySize;
-    YacUint32 setInputSizes;
-    YacUint32 fetchArraySize;
-    YacUint64 rowCount;
+    uint32_t sqlType;
+    uint32_t arraySize;
+    uint32_t setInputSizes;
+    uint32_t fetchArraySize;
+    uint64_t rowCount;
 
-    YacBool isOpen;
+    bool isOpen;
+    bool isFail;
 } AnpCursor;
 
-YacResult anpRegistCursor(PyObject* module);
+YapiResult anpRegistCursor(PyObject* module);
 extern PyTypeObject anchorPyTypeCursor;
 #endif //ANCHOR_ANP_CURSOR_H

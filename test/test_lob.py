@@ -1,3 +1,4 @@
+import os
 import random
 from sqlite3 import connect
 import test_base
@@ -28,7 +29,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
         self.assertEqual((1, 'B12AAA'), row)
-        self.cursor.execute("delete from test_lob_1")
+        self.cursor.execute("delete from test_lob_1") 
         self.cursor.execute("insert into test_lob_1 values(?, ?)", (2, 'aaaa'))
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
@@ -44,6 +45,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into test_lob_1 values(NULL, NULL)")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
+        self.assertEqual(row, ('',''))
         self.cursor.execute("drop table if exists test_lob_1")
         self.cursor.execute("drop table if exists tb_python_blob_01_1")
         self.cursor.execute("create table tb_python_blob_01_1(col1 blob)")
@@ -52,6 +54,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into tb_python_blob_01_1 values('123')")
         self.cursor.execute("select col1 from tb_python_blob_01_1")
         result=self.cursor.fetchall()
+        self.assertEqual(result, [('0A',), ('',), ('0123',)])
         seed = "1234567890"
         str1 = []
         for i in range(32):
@@ -70,7 +73,7 @@ class TestCase(test_base.TestBaseCase):
             StringS = ''.join(str1) 
         try:
             self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (StringS,))
-        except Exception as e:
+        except Exception as e: 
            error = str(e)
            if('illegal conversion from CLOB to BLOB' not in error):
              raise Exception('failed')
@@ -78,12 +81,7 @@ class TestCase(test_base.TestBaseCase):
         result=self.cursor.fetchone()
         values = [b'', b'http://c.biancheng.net/python/']
         for value in values:
-            try:
-                self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (value,))
-            except Exception as e:
-               error = str(e)
-               if('invalid hex number' not in error):
-                 raise Exception('failed')
+            self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (value,))
             self.cursor.execute("select col1 from tb_python_blob_01_1")
             row = self.cursor.fetchone()
         self.cursor.execute("drop table tb_python_blob_01_1")

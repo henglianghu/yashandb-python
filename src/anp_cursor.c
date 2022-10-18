@@ -3,6 +3,7 @@
 #include "anp_exception.h"
 #include "anp_var.h"
 
+
 static PyObject* anpCursorNew(PyTypeObject* type, PyObject* args, PyObject* keywordArgs)
 {
     return type->tp_alloc(type, 0);
@@ -21,15 +22,12 @@ static int anpCursorInit(AnpCursor* cursor, PyObject* args, PyObject* keywordArg
         return -1;
     }
 
-    if (yacAllocHandle(YAC_HANDLE_STMT, connection->hConn, &cursor->hStmt) != YAC_SUCCESS) {
-        return anpRaiseAndReturnIntException();
-    }
-
     // initialize members
     Py_INCREF(connection);
     cursor->connection = connection;
     cursor->arraySize = 100;
     cursor->isOpen = 1;
+    cursor->isFail = 0;
 
     return 0;
 }
@@ -38,79 +36,78 @@ static void anpCursorFree(AnpCursor* cursor)
 {
     Py_CLEAR(cursor->fetchVariables);
     Py_CLEAR(cursor->bindVariables);
-    if (cursor->isOpen && cursor->connection->hConn != NULL) {
-        yacFreeHandle(YAC_HANDLE_STMT, cursor->hStmt);
+    if (cursor->hStmt != NULL) {
+        yapiReleaseStmt(cursor->hStmt);
         cursor->hStmt = NULL;
-        cursor->isOpen = YAC_FALSE;
     }
 
     Py_CLEAR(cursor->connection);
     Py_TYPE(cursor)->tp_free((PyObject*)cursor);
 }
 
-static YacBool anpCursorIsOpen(AnpCursor* cursor)
+static bool anpCursorIsOpen(AnpCursor* cursor)
 {
     if (!cursor->isOpen) {
         anpRaiseExceptionFromString(anpInterfaceErrorException, "not open");
-        return YAC_FALSE;
+        return YAPI_FALSE;
     }
     return anpConnectionIsConnected(cursor->connection);
 }
 
-YacUint32 anpGetDisplaySize(YacColumnDesc* desc)
+uint32_t anpGetDisplaySize(YapiColumnDesc* desc)
 {
-    YacUint32 displaySize;
+    uint32_t displaySize;
     switch (desc->type) {
-        case YAC_TYPE_CHAR:
-        case YAC_TYPE_VARCHAR:
-        case YAC_TYPE_NCHAR:
-        case YAC_TYPE_NVARCHAR:
-        case YAC_TYPE_CLOB:
+        case YAPI_TYPE_CHAR:
+        case YAPI_TYPE_VARCHAR:
+        case YAPI_TYPE_NCHAR:
+        case YAPI_TYPE_NVARCHAR:
+        case YAPI_TYPE_CLOB:
             displaySize = codSizeAlign4(desc->size) + 1;
             break;
 
-        case YAC_TYPE_BINARY:
-        case YAC_TYPE_BLOB:
+        case YAPI_TYPE_BINARY:
+        case YAPI_TYPE_BLOB:
             displaySize = codSizeAlign4(desc->size * 2);
             break;
 
-        case YAC_TYPE_DATE:
+        case YAPI_TYPE_DATE:
             displaySize = 32;
             break;
 
-        case YAC_TYPE_TIMESTAMP:
-        case YAC_TYPE_TIMESTAMP_TZ:
-        case YAC_TYPE_TIMESTAMP_LTZ:
+        case YAPI_TYPE_TIMESTAMP:
+        case YAPI_TYPE_TIMESTAMP_TZ:
+        case YAPI_TYPE_TIMESTAMP_LTZ:
             displaySize = 64;
             break;
 
-        case YAC_TYPE_TINYINT:
+        case YAPI_TYPE_TINYINT:
             displaySize = 5;
             break;
 
-        case YAC_TYPE_SMALLINT:
+        case YAPI_TYPE_SMALLINT:
             displaySize = 8;
             break;
 
-        case YAC_TYPE_INTEGER:
+        case YAPI_TYPE_INTEGER:
             displaySize = 12;
             break;
 
-        case YAC_TYPE_BIGINT:
-        case YAC_TYPE_FLOAT:
-        case YAC_TYPE_DOUBLE:
+        case YAPI_TYPE_BIGINT:
+        case YAPI_TYPE_FLOAT:
+        case YAPI_TYPE_DOUBLE:
             displaySize = 21;
             break;
 
-        case YAC_TYPE_NUMBER:
+        case YAPI_TYPE_NUMBER:
             displaySize = codSizeAlign4(desc->precision + 8);
             break;
 
-        case YAC_TYPE_BIT:
+        case YAPI_TYPE_BIT:
             displaySize = desc->size + 1;
             break;
 
-        case YAC_TYPE_ROWID:
+        case YAPI_TYPE_ROWID:
             displaySize = 24;
             break;
 
@@ -121,10 +118,10 @@ YacUint32 anpGetDisplaySize(YacColumnDesc* desc)
     return displaySize;
 }
 
-static PyObject* anpCursorItemDescription(AnpCursor* cursor, YacUint32 pos)
+static PyObject* anpCursorItemDescription(AnpCursor* cursor, uint32_t pos)
 {
-    YacColumnDesc desc;
-    if (yacDescribeCol2(cursor->hStmt, pos, &desc) != YAC_SUCCESS) {
+    YapiColumnDesc desc;
+    if (yapiDescribeCol2(cursor->hStmt, pos, &desc) != YAPI_SUCCESS) {
         return NULL;
     }
 
@@ -167,7 +164,7 @@ static PyObject* anpCursorItemDescription(AnpCursor* cursor, YacUint32 pos)
 
 static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
 {
-    YacInt16 queryColumns;
+    int16_t queryColumns;
 
     // make sure the cursor is open
     if (!anpCursorIsOpen(cursor)) {
@@ -178,7 +175,7 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
     if (cursor->hStmt == NULL) {
         Py_RETURN_NONE;
     }
-    if (yacNumResultCols(cursor->hStmt, &queryColumns) != YAC_SUCCESS) {
+    if (yapiNumResultCols(cursor->hStmt, &queryColumns) != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     if (queryColumns == 0) {
@@ -192,7 +189,7 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
     }
 
     // create tuples corresponding to the select-items
-    for (YacInt16 i = 0; i < queryColumns; i++) {
+    for (int16_t i = 0; i < queryColumns; i++) {
         PyObject* tuple = anpCursorItemDescription(cursor, i);
         if (tuple == NULL) {
             Py_DECREF(results);
@@ -204,7 +201,7 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
     return results;
 }
 
-static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numElements, unsigned arrayPos,
+static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numElements, unsigned arrayPos,
     PyObject* value, AnpVar* origVar, AnpVar** newVar, int deferTypeAssignment)
 {
     AnpVar* varToSet;
@@ -222,17 +219,15 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
                 Py_INCREF(value);
                 *newVar = (AnpVar*)value;
             }
-            return YAC_SUCCESS;
+            return YAPI_SUCCESS;
         }
 
         varToSet = origVar;
         if (numElements >= origVar->elements) {
-            if (anpGetSize(value) > 8000) {
-                origVar->size = anpGetSize(value);
-            }
+            anpAdjustVarTypeSize(value, &origVar->size, &origVar->dbType);
             *newVar = anpNewVar(cursor, numElements, origVar->dbType, origVar->size, origVar->isArray);
             if (!*newVar) {
-                return YAC_ERROR;
+                return YAPI_ERROR;
             }
             varToSet = *newVar;
         }
@@ -241,7 +236,7 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
         if (varToSet && anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
             // executemany() should simply fail after the first element
             if (arrayPos > 0) {
-                return YAC_ERROR;
+                return YAPI_ERROR;
             }
 
             // clear the exception and try to create a new variable
@@ -263,49 +258,49 @@ static YacResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numE
         } else if (value != Py_None || !deferTypeAssignment) {
             *newVar = anpVarNewByValue(cursor, value, numElements);
             if (*newVar == NULL) {
-                return YAC_ERROR;
+                return YAPI_ERROR;
             }
             if (anpVarSetValue(cursor->connection->hConn, *newVar, arrayPos, value) < 0) {
                 Py_CLEAR(*newVar);
-                return YAC_ERROR;
+                return YAPI_ERROR;
             }
         }
     }
 
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
 
-YacResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
+YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
                                 int deferTypeAssignment)
 {
     Py_ssize_t temp = PySequence_Size(parameters);
     if (temp < 0) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
 
-    YacUint32 numParams = (YacUint32)temp;
-    YacUint32 origNumParams = 0;
+    uint32_t numParams = (uint32_t)temp;
+    uint32_t origNumParams = 0;
     if (cursor->bindVariables) {
-        YacUint32 origBoundByPos = PyList_Check(cursor->bindVariables);
+        uint32_t origBoundByPos = PyList_Check(cursor->bindVariables);
         if (!origBoundByPos) {
             anpRaiseExceptionFromString(anpProgrammingErrorException,
                                         "positional and named binds cannot be intermixed");
-            return YAC_ERROR;
+            return YAPI_ERROR;
         }
-        origNumParams = (YacUint32)PyList_GET_SIZE(cursor->bindVariables);
+        origNumParams = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
     } else {
         cursor->bindVariables = PyList_New(numParams);
         if (!cursor->bindVariables) {
-            return YAC_ERROR;
+            return YAPI_ERROR;
         }
     }
     AnpVar* newVar;
 
-    for (YacUint32 i = 0; i < numParams; i++) {
+    for (uint32_t i = 0; i < numParams; i++) {
         PyObject* origVar;
         PyObject* value = PySequence_GetItem(parameters, i);
         if (value == NULL) {
-            return YAC_ERROR;
+            return YAPI_ERROR;
         }
         Py_DECREF(value);
         if (i < origNumParams) {
@@ -319,27 +314,27 @@ YacResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigne
 
         if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, value, (AnpVar*)origVar, &newVar,
                                            deferTypeAssignment) < 0) {
-            return YAC_ERROR;
+            return YAPI_ERROR;
         }
         if (newVar) {
             if (i < (uint32_t)PyList_GET_SIZE(cursor->bindVariables)) {
                 if (PyList_SetItem(cursor->bindVariables, i, (PyObject*)newVar) < 0) {
                     Py_DECREF(newVar);
-                    return YAC_ERROR;
+                    return YAPI_ERROR;
                 }
             } else {
                 if (PyList_Append(cursor->bindVariables, (PyObject*)newVar) < 0) {
                     Py_DECREF(newVar);
-                    return YAC_ERROR;
+                    return YAPI_ERROR;
                 }
                 Py_DECREF(newVar);
             }
         }
     }
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
 
-YacResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
+YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
                                  int deferTypeAssignment)
 {
 #if 0
@@ -379,7 +374,7 @@ YacResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsign
     return 0;
 }
 
-YacResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, YacUint32 numElements, unsigned arrayPos,
+YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, uint32_t numElements, unsigned arrayPos,
                                     int deferTypeAssignment)
 {
     if (PySequence_Check(parameters)) {
@@ -389,62 +384,62 @@ YacResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, Yac
     }
 }
 
-void anpGetColumnSize(YacColumnDesc* desc, YacUint32* bindSize)
+void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
 {
     switch (desc->type) {
-        case YAC_TYPE_CHAR:
-        case YAC_TYPE_VARCHAR:
-        case YAC_TYPE_NCHAR:
-        case YAC_TYPE_NVARCHAR:
+        case YAPI_TYPE_CHAR:
+        case YAPI_TYPE_VARCHAR:
+        case YAPI_TYPE_NCHAR:
+        case YAPI_TYPE_NVARCHAR:
             *bindSize = codSizeAlign4(desc->size) + 1;
             break;
 
-        case YAC_TYPE_BINARY:
+        case YAPI_TYPE_BINARY:
             *bindSize = codSizeAlign4(desc->size * 2);
             break;
 
-        case YAC_TYPE_DATE:
+        case YAPI_TYPE_DATE:
             *bindSize = 32;
             break;
 
-        case YAC_TYPE_TIMESTAMP:
-        case YAC_TYPE_TIMESTAMP_TZ:
-        case YAC_TYPE_TIMESTAMP_LTZ:
+        case YAPI_TYPE_TIMESTAMP:
+        case YAPI_TYPE_TIMESTAMP_TZ:
+        case YAPI_TYPE_TIMESTAMP_LTZ:
             *bindSize = 64;
             break;
 
-        case YAC_TYPE_TINYINT:
+        case YAPI_TYPE_TINYINT:
             *bindSize = 5;
             break;
 
-        case YAC_TYPE_SMALLINT:
+        case YAPI_TYPE_SMALLINT:
             *bindSize = 8;
             break;
 
-        case YAC_TYPE_INTEGER:
+        case YAPI_TYPE_INTEGER:
             *bindSize = 12;
             break;
 
-        case YAC_TYPE_BIGINT:
-        case YAC_TYPE_FLOAT:
-        case YAC_TYPE_DOUBLE:
+        case YAPI_TYPE_BIGINT:
+        case YAPI_TYPE_FLOAT:
+        case YAPI_TYPE_DOUBLE:
             *bindSize = 21;
             break;
 
-        case YAC_TYPE_NUMBER:
+        case YAPI_TYPE_NUMBER:
             *bindSize = codSizeAlign4(desc->precision + 8);;
             break;
 
-        case YAC_TYPE_BIT:
+        case YAPI_TYPE_BIT:
             *bindSize = desc->size + 1;
             break;
 
-        case YAC_TYPE_ROWID:
+        case YAPI_TYPE_ROWID:
             *bindSize = 44;
             break;
 
-        case YAC_TYPE_BLOB:
-        case YAC_TYPE_CLOB:
+        case YAPI_TYPE_BLOB:
+        case YAPI_TYPE_CLOB:
             *bindSize = -1;
             break;
         default:
@@ -453,7 +448,7 @@ void anpGetColumnSize(YacColumnDesc* desc, YacUint32* bindSize)
     }
 }
 
-YacResult anpCursorPerformBind(AnpCursor* cursor)
+YapiResult anpCursorPerformBind(AnpCursor* cursor)
 {
     PyObject * key, *var;
     Py_ssize_t pos;
@@ -471,7 +466,7 @@ YacResult anpCursorPerformBind(AnpCursor* cursor)
             pos = 0;
             while (PyDict_Next(cursor->bindVariables, &pos, &key, &var)) {
                 if (anpBindVar((AnpVar*)var, cursor, key, 1) < 0) {
-                    return YAC_ERROR;
+                    return YAPI_ERROR;
                 }
             }
         } else {
@@ -479,16 +474,16 @@ YacResult anpCursorPerformBind(AnpCursor* cursor)
                 var = PyList_GET_ITEM(cursor->bindVariables, i);
                 if (var != Py_None) {
                     if (anpBindVar((AnpVar*)var, cursor, NULL, i + 1) < 0) {
-                        return YAC_ERROR;
+                        return YAPI_ERROR;
                     }
                 }
             }
         }
     }
-    return YAC_SUCCESS; 
+    return YAPI_SUCCESS;
 }
 
-static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)
+static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 {
     // if fetch variables already exist, nothing more to do (we are executing
     // the same statement and therefore all defines have already been
@@ -503,17 +498,17 @@ static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)
         return -1;
     }
 
-    YacUint32     pos;
-    YacColumnDesc queryInfo;
+    uint32_t     pos;
+    YapiColumnDesc queryInfo;
     // create a variable for each of the query columns
     cursor->fetchArraySize = cursor->arraySize;
     for (pos = 0; pos < numQueryColumns; pos++) {
         // get query information for the column position
-        if (yacDescribeCol2(cursor->hStmt, pos, &queryInfo) != YAC_SUCCESS) {
+        if (yapiDescribeCol2(cursor->hStmt, pos, &queryInfo) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
 
-        YacUint32 size;
+        uint32_t size;
         anpGetColumnSize(&queryInfo, &size);
 
         AnpVar* var = anpNewVar(cursor, cursor->fetchArraySize, queryInfo.type, size, 0);
@@ -523,15 +518,15 @@ static int anpCursorPerformDefine(AnpCursor* cursor, YacUint32 numQueryColumns)
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
 
-        if( var->transType == YAC_TYPE_CLOB || var->transType == YAC_TYPE_BLOB)
+        if( var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
         {
-            if (yacBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, var->indicator) != YAC_SUCCESS) {
+            if (yapiBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, NULL) != YAPI_SUCCESS) {
                 return anpRaiseAndReturnIntException();
             }
             continue;
         }
 
-        if (yacBindColumn(cursor->hStmt, pos, var->transType, var->data, size, var->indicator) != YAC_SUCCESS) {
+        if (yapiBindColumn(cursor->hStmt, pos, var->transType, var->data, size, var->indicator) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
     }
@@ -542,20 +537,20 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
 {
     if (!cursor->bindVariables)
     {
-        return YAC_SUCCESS;
+        return YAPI_SUCCESS;
     }
 
-    YacUint32 bindNum = (YacUint32)PyList_GET_SIZE(cursor->bindVariables);
+    uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
     AnpVar* bindVar;
-    for (YacUint32 i = 0; i < bindNum; i++)
+    for (uint32_t i = 0; i < bindNum; i++)
     {
         bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
-        if (bindVar->transType != YAC_TYPE_CLOB && bindVar->transType != YAC_TYPE_BLOB)
+        if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB)
         {
             continue;
         }
 
-        if (yacLobFreeTemporary(cursor->connection->hConn, (YacLobLocator*)bindVar->data) != YAC_SUCCESS)
+        if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS)
         {
             return anpRaiseAndReturnIntException();
         }
@@ -566,7 +561,7 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
     PyObject *statement, *executeArgs;
-    YacInt16  numQueryColumns;
+    int16_t  numQueryColumns;
     int       status;
 
     executeArgs = NULL;
@@ -597,7 +592,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return NULL;
     }
 
-    if (statement == cursor->statment) {
+    if (statement == cursor->statment && !cursor->isFail) {
         statement = cursor->statment;
     } else {
         Py_CLEAR(cursor->statment);
@@ -607,19 +602,24 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_CLEAR(cursor->bindVariables);
 
         // prepare the statement, if applicable
-        YacChar * sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
+        char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
         Py_BEGIN_ALLOW_THREADS
-        status = yacPrepare(cursor->hStmt, sql, strlen(sql));
+            if (cursor->hStmt != NULL) {
+                yapiReleaseStmt(cursor->hStmt);
+                cursor->hStmt = NULL;
+            }
+            status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
         Py_END_ALLOW_THREADS
-        if (status != YAC_SUCCESS) {
+        if (status != YAPI_SUCCESS) {
+            cursor->isFail = 1;
             return anpRaiseAndReturnNullException();
         }
-        YacInt32 len;
-        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAC_SUCCESS) {
+        int32_t len;
+        if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAPI_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
     }
-    if (yacNumResultCols(cursor->hStmt, &numQueryColumns) != YAC_SUCCESS) {
+    if (yapiNumResultCols(cursor->hStmt, &numQueryColumns) != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
 
@@ -633,9 +633,16 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     // execute the statement
     Py_BEGIN_ALLOW_THREADS
-    status = yacExecute(cursor->hStmt);
+        status = yapiExecute(cursor->hStmt);
     Py_END_ALLOW_THREADS
-    if (status != YAC_SUCCESS) {
+    if (status != YAPI_SUCCESS) {
+        cursor->isFail = 1;
+        return anpRaiseAndReturnNullException();
+    }
+
+    cursor->isFail = 0;
+    if (anpTryReleaseLobLoc(cursor) < 0)
+    {
         return anpRaiseAndReturnNullException();
     }
 
@@ -645,14 +652,14 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
     }
 
     if (numQueryColumns == 0) {
-        if (cursor->sqlType >= YAC_SQLTYPE_CREATE_DATABASE) {
+        if (cursor->sqlType >= YAPI_SQLTYPE_CREATE_DATABASE) {
             cursor->rowCount = 1;
             Py_RETURN_NONE;
         }
         // get the count of the rows affected
-        YacInt32 len;
-        if (yacGetStmtAttr(cursor->hStmt, YAC_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(YacUint64), &len)
-            != YAC_SUCCESS) {
+        int32_t len;
+        if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(uint64_t), &len)
+            != YAPI_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
         Py_RETURN_NONE;
@@ -675,8 +682,8 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
 static PyObject* anpCursorClose(AnpCursor* cursor, PyObject* args)
 {
-    if (anpCursorIsOpen(cursor)) {
-        yacFreeHandle(YAC_HANDLE_STMT, cursor->hStmt);
+    if (anpCursorIsOpen(cursor) && cursor->hStmt != NULL) {
+        yapiReleaseStmt(cursor->hStmt);
     }
     cursor->hStmt = NULL;
     cursor->isOpen = false;
@@ -712,30 +719,30 @@ static PyObject* anpCursorCreateRow(AnpCursor* cursor, uint32_t pos)
     return tuple;
 }
 
-static YacResult anpCursorCheck(AnpCursor* cursor)
+static YapiResult anpCursorCheck(AnpCursor* cursor)
 {
     if (!anpCursorIsOpen(cursor)) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
     if (cursor->fetchVariables == NULL) {
         anpRaiseExceptionFromString(anpInterfaceErrorException, "not a query");
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
 
 static PyObject* anpCursorFetchOne(AnpCursor* cursor, PyObject* args)
 {
-    YacResult ret;
-    if (anpCursorCheck(cursor) != YAC_SUCCESS) {
+    YapiResult ret;
+    if (anpCursorCheck(cursor) != YAPI_SUCCESS) {
         return NULL;
     }
     
-    YacUint32 rows;
+    uint32_t rows;
     Py_BEGIN_ALLOW_THREADS
-    ret = yacFetch(cursor->hStmt, &rows);
+    ret = yapiFetch(cursor->hStmt, &rows);
     Py_END_ALLOW_THREADS
-    if (ret != YAC_SUCCESS) {
+    if (ret != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     if (rows > 0) {
@@ -755,14 +762,14 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args)
     return anpRaiseExceptionFromString(anpNotSupportedException, "executemany() not implement");
 }
 
-static PyObject* anpCursorFetch(AnpCursor* cursor, YacUint32 fetchRows)
+static PyObject* anpCursorFetch(AnpCursor* cursor, uint32_t fetchRows)
 {
     PyObject *list = NULL;
     PyObject *row = NULL;
-    YacResult ret;
-    YacUint32 rowCount, rows;
+    YapiResult ret;
+    uint32_t rowCount, rows;
 
-    if (anpCursorCheck(cursor) != YAC_SUCCESS) {
+    if (anpCursorCheck(cursor) != YAPI_SUCCESS) {
         return NULL;
     }
 
@@ -774,10 +781,10 @@ static PyObject* anpCursorFetch(AnpCursor* cursor, YacUint32 fetchRows)
     for(rowCount = 0; fetchRows == 0 || rowCount < fetchRows; rowCount++) {
         rows = 0;
         Py_BEGIN_ALLOW_THREADS
-        ret = yacFetch(cursor->hStmt, &rows);
+        ret = yapiFetch(cursor->hStmt, &rows);
         Py_END_ALLOW_THREADS
 
-        if (ret != YAC_SUCCESS) {
+        if (ret != YAPI_SUCCESS) {
             Py_DECREF(list);
             return anpRaiseAndReturnNullException();
         }
@@ -806,7 +813,7 @@ static PyObject* anpCursorFetch(AnpCursor* cursor, YacUint32 fetchRows)
 
 static PyObject* anpCursorFetchMany(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
-    YacInt32 fetchRows = 0;
+    int32_t fetchRows = 0;
     static char*   keywordList[] = {"size", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "|i", keywordList, &fetchRows)) {
         return NULL;
@@ -842,7 +849,7 @@ static PyObject* anpCursorSetOutputSize(AnpCursor* cursor, PyObject* args)
 
 static PyObject* anpCursorIter(AnpCursor* cursor)
 {
-    if (anpCursorCheck(cursor) != YAC_SUCCESS) {
+    if (anpCursorCheck(cursor) != YAPI_SUCCESS) {
         return NULL;
     }
 
@@ -852,16 +859,16 @@ static PyObject* anpCursorIter(AnpCursor* cursor)
 
 static PyObject* anpCursorNext(AnpCursor * cursor)
 {
-    YacResult ret;
-    if (anpCursorCheck(cursor) != YAC_SUCCESS) {
+    YapiResult ret;
+    if (anpCursorCheck(cursor) != YAPI_SUCCESS) {
         return NULL;
     }
 
-    YacUint32 rows;
+    uint32_t rows;
     Py_BEGIN_ALLOW_THREADS
-    ret = yacFetch(cursor->hStmt, &rows);
+    ret = yapiFetch(cursor->hStmt, &rows);
     Py_END_ALLOW_THREADS
-    if (ret != YAC_SUCCESS) {
+    if (ret != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
     printf("anpCursorNext:%d\n", rows);
@@ -913,13 +920,13 @@ PyTypeObject anchorPyTypeCursor = {
         .tp_new = anpCursorNew
 };
 
-YacResult anpRegistCursor(PyObject *module)
+YapiResult anpRegistCursor(PyObject *module)
 {
     PyType_Ready(&anchorPyTypeCursor);
 
     Py_INCREF(&anchorPyTypeCursor);
     if (PyModule_AddObject(module, "Cursor", (PyObject *) &anchorPyTypeCursor) < 0) {
-        return YAC_ERROR;
+        return YAPI_ERROR;
     }
-    return YAC_SUCCESS;
+    return YAPI_SUCCESS;
 }
