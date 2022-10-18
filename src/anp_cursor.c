@@ -646,6 +646,11 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
+    if (anpTryReleaseLobLoc(cursor) < 0)
+    {
+        return anpRaiseAndReturnNullException();
+    }
+
     if (numQueryColumns == 0) {
         if (cursor->sqlType >= YAPI_SQLTYPE_CREATE_DATABASE) {
             cursor->rowCount = 1;
