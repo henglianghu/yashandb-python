@@ -176,7 +176,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
         length *= 2;
     }
     
-    char* readBuf = PyMem_Malloc(length);
+    char* readBuf = PyMem_Malloc(length + 1);
     if (readBuf == NULL)
     {
         return (PyObject*)PyErr_NoMemory();
@@ -378,7 +378,7 @@ int anpGetSize(PyObject * value)
         return 1;
     }
     if (PyUnicode_Check(value)) {
-        return (int)PyUnicode_GET_LENGTH(value) + 1;
+        return PyUnicode_GET_LENGTH(value) + 1;
     }
     if (PyBytes_Check(value)) {
         return (int)PyBytes_GET_SIZE(value) + 1;
@@ -417,17 +417,10 @@ YapiType anpGetType(PyObject * value)
     return 0;
 }
 
-void anpAdjustVarTypeSize(PyObject* value, Py_ssize_t* size,YapiType* type)
+void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type)
 {
     *type = anpGetType(value);
-    if (*type != YAPI_TYPE_VARCHAR) {
-        return ;
-    }
-
-    *size = anpGetSize(value);
-    if (*size <= 8000) {
-        *size = 8000;
-    } 
+    *size = (Py_ssize_t)anpGetSize(value);
 }
 
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements)
@@ -462,7 +455,5 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         size = anpGetSize(value);
         type = anpGetType(value);
     }
-    
-    anpAdjustVarTypeSize(value, &size, &type);
     return anpNewVar(cursor, numElements, type, size, isArray);
 }

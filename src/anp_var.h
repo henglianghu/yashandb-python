@@ -30,6 +30,6 @@ PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos);
 
 int     anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements);
-void anpAdjustVarTypeSize(PyObject* value, Py_ssize_t* size,YapiType* type);
+void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type);
 
 #endif  // ANCHOR_ANP_VAR_H

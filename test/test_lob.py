@@ -1,6 +1,5 @@
 import os
 import random
-from sqlite3 import connect
 import test_base
 import yaspy
 
@@ -85,6 +84,33 @@ class TestCase(test_base.TestBaseCase):
             self.cursor.execute("select col1 from tb_python_blob_01_1")
             row = self.cursor.fetchone()
         self.cursor.execute("drop table tb_python_blob_01_1")
+        self.cursor.execute("drop table if exists tb_python_clob_02_1")
+        self.cursor.execute("create table tb_python_clob_02_1(col1 clob,col2 int)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values('a',2147483647)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values('',-2147483648)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values(null,-2147483648)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values(123,0)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values(-1.797693134862315807,8)")
+        self.cursor.execute("insert into tb_python_clob_02_1 values(1/0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000001,21)")
+        self.cursor.execute("select col1,col2  from tb_python_clob_02_1 order by col2")
+        result=self.cursor.fetchall()
+        self.assertEqual(result, [('',-2147483648), ('',-2147483648), ('123', 0), ('-1.797693134862315807', 8), ('1.0000000000000000000000000000000000E+89', 21), ('a', 2147483647)])
+        self.cursor.execute("drop table if exists tb_python_clob_02_1")
+        self.cursor.execute("drop table if exists tb_python_clob_06_1")
+        self.cursor.execute("create table tb_python_clob_06_1(col1 clob,col2 int)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('abcdef',-1)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('',2)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('9012345678',3)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values(null,0)")
+        values = ['1234567890adefkl','0','9','df']
+        i = 12
+        for value in values:
+            self.cursor.execute("insert into tb_python_clob_06_1 values(?,?)", (value,i))
+            i = i + 1
+        self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
+        result=self.cursor.fetchall()
+        self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15)])
+        self.cursor.execute("drop table if exists tb_python_clob_02_1")
         
     if __name__ == "__main__":
         test_base.run_test_cases()
