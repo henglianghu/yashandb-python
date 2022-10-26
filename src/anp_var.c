@@ -98,7 +98,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_s
         var->transType = type;
     }
 
-    if(type != YAPI_TYPE_CLOB && type != YAPI_TYPE_BLOB && size > 8000)
+    if(type != YAPI_TYPE_CLOB && type != YAPI_TYPE_BLOB && size > 32000)
     {
         var->transType = type == YAPI_TYPE_BINARY ? YAPI_TYPE_BLOB : YAPI_TYPE_CLOB;
         var->dbType = var->transType;
