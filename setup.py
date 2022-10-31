@@ -10,11 +10,13 @@ _DEBUG_LEVEL = 0
 
 # setup extra link and compile args
 extra_link_args = []
-extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
-if _DEBUG:
-    extra_compile_args += ["-g3", "-O0", "-DDEBUG=%s" % _DEBUG_LEVEL, "-UNDEBUG"]
-else:
-    extra_compile_args += ["-DNDEBUG", "-O3"]
+extra_compile_args = []
+if sys.platform == "linux":
+    extra_compile_args = sysconfig.get_config_var('CFLAGS').split()
+    if _DEBUG:
+        extra_compile_args += ["-g3", "-O0", "-DDEBUG=%s" % _DEBUG_LEVEL, "-UNDEBUG"]
+    else:
+        extra_compile_args += ["-DNDEBUG", "-O3"]
     
 if sys.platform == "aix4":
     extra_compile_args.append("-qcpluscmt")
