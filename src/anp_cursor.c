@@ -535,23 +535,19 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 
 static int anpTryReleaseLobLoc(AnpCursor* cursor)
 {
-    if (!cursor->bindVariables)
-    {
+    if (!cursor->bindVariables) {
         return YAPI_SUCCESS;
     }
 
     uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
     AnpVar* bindVar;
-    for (uint32_t i = 0; i < bindNum; i++)
-    {
+    for (uint32_t i = 0; i < bindNum; i++) {
         bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
-        if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB)
-        {
+        if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB) {
             continue;
         }
 
-        if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS)
-        {
+        if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
     }
