@@ -171,27 +171,26 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     YapiLobLocator* loc = (YapiLobLocator*)data;
     uint64_t length;
     yapiLobGetLength(hConn, loc, &length);
-    if (type == YAPI_TYPE_BLOB)
-    {
+    if (type == YAPI_TYPE_BLOB) {
         length *= 2;
     }
     
     char* readBuf = PyMem_Malloc(length + 1);
-    if (readBuf == NULL)
-    {
+    if (readBuf == NULL) {
         return (PyObject*)PyErr_NoMemory();
     }
     readBuf[length] = '\0';
     
-    if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf, length) != YAPI_SUCCESS)
-    {
+    if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf, length) != YAPI_SUCCESS) {
+        PyMem_Free(readBuf);
+        readBuf = NULL;
         return anpRaiseAndReturnNullException();
     }
     
-    if (type == YAPI_TYPE_BLOB)
-    {
-        if (anpLobBytes2Str((uint8_t*)readBuf, length) != YAPI_SUCCESS)
-        {
+    if (type == YAPI_TYPE_BLOB) {
+        if (anpLobBytes2Str((uint8_t*)readBuf, length) != YAPI_SUCCESS) {
+            PyMem_Free(readBuf);
+            readBuf = NULL;
             return anpRaiseAndReturnNullException();
         }
     }
@@ -290,11 +289,10 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         return -1;
     }
 
-    if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB)
-    {
+    if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB) {
         if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
-        return -1;
+            return -1;
         }
         return 0;
     }
