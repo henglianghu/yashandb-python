@@ -219,8 +219,8 @@ AnpError *anpExceptionNewFromInfo(YapiErrorInfo* info)
         return NULL;
     }
     error->code = info->errCode;
-    error->line = info->pos.line;
-    error->column = info->pos.column;
+    error->line = info->pos->line;
+    error->column = info->pos->column;
 
     // create message
     error->message = PyUnicode_Decode(info->message, strlen(info->message), NULL, NULL);
