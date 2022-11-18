@@ -8,3 +8,8 @@ dist
 .idea
 .vscode
 *.egg
+*venv*/
+
+*.pdb
+*.pyd
+*.egg-info

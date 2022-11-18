@@ -26,6 +26,10 @@ elif sys.platform == "cygwin":
     extra_link_args.append("-Wl,--enable-runtime-pseudo-reloc")
 elif sys.platform == "darwin":
     extra_link_args.append("-shared-libgcc")
+elif sys.platform == "win32":
+    if _DEBUG:
+        extra_link_args.append("/DEBUG")
+        extra_compile_args.append("/Zi")
 
 source_dir = "src"
 sources = [os.path.join(source_dir, n) \

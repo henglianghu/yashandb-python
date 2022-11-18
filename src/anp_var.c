@@ -8,7 +8,13 @@ PyTypeObject *anpPyTypeDateTime;
 static void anpVarFree(AnpVar *var)
 {
     if(var->data) {
-        PyMem_Free(var->data);
+        if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB) {
+            if (yapiLobDescFree(var->data, var->transType) != YAPI_SUCCESS) {
+                (void)anpRaiseAndReturnNullException();
+            }
+        } else {
+            PyMem_Free(var->data);
+        }
     }
     if (var->indicator) {
         PyMem_Free(var->indicator);

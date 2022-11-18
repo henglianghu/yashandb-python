@@ -112,5 +112,20 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15)])
         self.cursor.execute("drop table if exists tb_python_clob_02_1")
         
+        self.cursor.execute("drop table if exists tb_python_clob_06_1")
+        self.cursor.execute("create table tb_python_clob_06_1(col1 clob,col2 int)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('abcdef',-1)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('',2)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('9012345678',3)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values(null,0)")
+        values = ['1234567890adefkl','0','9','df','aa']
+        i = 12
+        for value in values:
+            self.cursor.execute("insert into tb_python_clob_06_1 values(?,?)", (value,i))
+            i = i + 1
+        self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
+        result=self.cursor.fetchall()
+        self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15), ('aa', 16)])
+
     if __name__ == "__main__":
         test_base.run_test_cases()
