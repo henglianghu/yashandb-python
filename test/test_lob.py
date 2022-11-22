@@ -127,5 +127,13 @@ class TestCase(test_base.TestBaseCase):
         result=self.cursor.fetchall()
         self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15), ('aa', 16)])
 
+        self.cursor.execute("drop table if exists tb_python_clob_06_1")
+        self.cursor.execute("create table tb_python_clob_06_1(col1 clob,col2 int)")
+        self.cursor.execute("insert into tb_python_clob_06_1 values('中国、。，。反对反对’;',0)")
+        self.cursor.execute("commit")
+        self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
+        result=self.cursor.fetchall()
+        self.assertEqual(result,[('中国、。，。反对反对’;', 0)])
+
     if __name__ == "__main__":
         test_base.run_test_cases()
