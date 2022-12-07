@@ -147,15 +147,20 @@ static PyObject* anpCursorItemDescription(AnpCursor* cursor, uint32_t pos)
         PyTuple_SET_ITEM(tuple, 3, Py_None);
     }
 
-    if (desc.precision != 255 || desc.scale != -128) {
+    if (desc.precision != 255) {
         PyTuple_SET_ITEM(tuple, 4, PyLong_FromLong(desc.precision));
-        PyTuple_SET_ITEM(tuple, 5, PyLong_FromLong(desc.scale));
     } else {
         Py_INCREF(Py_None);
         PyTuple_SET_ITEM(tuple, 4, Py_None);
+    }
+
+    if (desc.scale != -128) {
+        PyTuple_SET_ITEM(tuple, 5, PyLong_FromLong(desc.scale));
+    } else {
         Py_INCREF(Py_None);
         PyTuple_SET_ITEM(tuple, 5, Py_None);
     }
+
 
     PyTuple_SET_ITEM(tuple, 6, PyLong_FromLong(desc.nullable));
 
