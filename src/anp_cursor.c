@@ -412,6 +412,14 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
         case YAPI_TYPE_TIMESTAMP_LTZ:
             *bindSize = 64;
             break;
+        
+        case YAPI_TYPE_YM_INTERVAL:
+            *bindSize = 15;
+            break;
+
+        case YAPI_TYPE_DS_INTERVAL:
+            *bindSize = 32;
+            break;
 
         case YAPI_TYPE_TINYINT:
             *bindSize = 5;

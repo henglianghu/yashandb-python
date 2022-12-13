@@ -98,7 +98,8 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_s
     var->isArray = isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
-    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_ROWID){
+    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
+        type == YAPI_TYPE_YM_INTERVAL || type == YAPI_TYPE_DS_INTERVAL) {
         var->transType = YAPI_TYPE_VARCHAR;
     } else {
         var->transType = type;
@@ -216,6 +217,9 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
     YapiDateStruct ds;
     
     switch (type) {
+        case YAPI_TYPE_BOOL:
+            result = PyBool_FromLong(*(int8_t*)data);
+            break;
         case YAPI_TYPE_TINYINT:
             result = PyLong_FromLong(*(int8_t*)data);
             break;
@@ -263,6 +267,9 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
         case YAPI_TYPE_VARCHAR:
         case YAPI_TYPE_NVARCHAR:
         case YAPI_TYPE_ROWID:
+        case YAPI_TYPE_BIT:
+        case YAPI_TYPE_YM_INTERVAL:
+        case YAPI_TYPE_DS_INTERVAL:
             result = PyUnicode_FromString(data);
             break;
         case YAPI_TYPE_CLOB:
