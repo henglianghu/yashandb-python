@@ -65,8 +65,27 @@ static PyObject *anpErrorReduce(AnpError *error)
 
 static PyObject *anpErrorStr(AnpError *error)
 {
-    Py_INCREF(error->message);
-    return error->message;
+    char errCodeMsg[30] = {{0}};
+    if (error->line > 0) {
+        sprintf(errCodeMsg, "[%d:%d]YAS-%05d ", error->line, error->column, error->code);
+    } else {
+        sprintf(errCodeMsg, "YAS-%05d ", error->code);
+    }
+
+    PyObject *pyErrCodeMsg = PyUnicode_Decode(errCodeMsg, strlen(errCodeMsg), NULL, NULL);
+    if (!pyErrCodeMsg) {
+        Py_DECREF(pyErrCodeMsg);
+        return NULL;
+    }
+
+    PyObject *pyErrorMsg = PyUnicode_Concat(pyErrCodeMsg, error->message);
+    if (!pyErrorMsg) {
+        Py_DECREF(pyErrorMsg);
+        return NULL;
+    }
+
+    Py_DECREF(pyErrCodeMsg);
+    return pyErrorMsg;
 }
 
 static PyMethodDef anpErrorMethods[] = {
