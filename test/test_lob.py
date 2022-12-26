@@ -135,5 +135,36 @@ class TestCase(test_base.TestBaseCase):
         result=self.cursor.fetchall()
         self.assertEqual(result,[('中国、。，。反对反对’;', 0)])
 
-    if __name__ == "__main__":
-        test_base.run_test_cases()
+    def test_sdv_tb_python_clob_03(self):
+        self.cursor.execute("drop table if exists tb_python_clob_03_1")
+        #I1.创建表
+        self.cursor.execute("create table tb_python_clob_03_1(col1 clob, col2 int)")
+        #I2.插入数据
+        self.cursor.execute("insert into tb_python_clob_03_1 values(null, 0)")
+        self.cursor.execute("insert into tb_python_clob_03_1 values('AQD~!@#<F11>`abcdf', 1)")
+        self.cursor.execute("insert into tb_python_clob_03_1 values('中国@china~~~~！@#￥%……&*（）——+', 2)")
+
+        #python的传参方式插入
+        values = ['1234567890abcdef','中国@china~~~~！@#￥%……&*（）——+','9876543210','AQD~!@i<fdfdf>#abcdf','']
+        i = 3
+        for value in values:
+            self.cursor.execute("insert into tb_python_clob_03_1 values(?,?)", (value, i))
+            i = i + 1
+        
+        #I3.python插入时，绑定的时单双引号等 
+        values = ['\'fdsfdf我123','"对方的"adfdf12',"'dfd'''''f!"]
+        for value in values:
+            self.cursor.execute("insert into tb_python_clob_03_1 values(?, ?)", (value, i))
+            i = i + 1
+
+        self.cursor.execute("select col1, col2 from tb_python_clob_03_1 order by col2")
+        result=self.cursor.fetchall()
+        expectRow = [('', 0), ('AQD~!@#<F11>`abcdf', 1), ('中国@china~~~~！@#￥%……&*（）——+', 2), 
+        ('1234567890abcdef', 3), ('中国@china~~~~！@#￥%……&*（）——+', 4), ('9876543210', 5), 
+        ('AQD~!@i<fdfdf>#abcdf', 6), ('', 7), ("'fdsfdf我123", 8), ('"对方的"adfdf12', 9), ("'dfd'''''f!", 10)]
+        self.assertEqual(result, expectRow)
+        #I4.删表
+        self.cursor.execute("drop table if exists tb_python_clob_03_1")
+
+if __name__ == "__main__":
+    test_base.run_test_cases()
