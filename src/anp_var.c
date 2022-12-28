@@ -315,32 +315,34 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     if (value == Py_None){
         var->indicator[arrayPos] = YAPI_NULL_DATA;
     }
+
     if (PyBool_Check(value)) {
         bool* b = (bool *)var->data;
         b[arrayPos] = PyObject_IsTrue(value);
         var->indicator[arrayPos] = (int32_t)sizeof(bool);
         return 0;
     }
+
     if (PyUnicode_Check(value)) {
-        PyObject* tmp = PyUnicode_AsEncodedString(value, "utf8", NULL);
-        if (tmp == NULL) {
+        Py_ssize_t enCodeStrSize = 0;
+        const char* bindStr = PyUnicode_AsUTF8AndSize(value, &enCodeStrSize);
+        if (bindStr == NULL) {
             return -1;
         }
 
-        if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
-        {
+        if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB) {
              if (yapiLobWrite(hConn, (YapiLobLocator*)var->data, NULL, 
-                        (uint8_t*)PyBytes_AS_STRING(tmp), (int)PyUnicode_GET_LENGTH(value)) != YAPI_SUCCESS)
-             {
+                 (uint8_t*)bindStr, (uint64_t)enCodeStrSize) != YAPI_SUCCESS) {
                 return -1;
              }
              return 0;
         } else {
-            strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(tmp));
-            var->indicator[arrayPos] = (int)PyUnicode_GET_LENGTH(value);
+            strcpy(var->data + var->size*arrayPos, bindStr);
+            var->indicator[arrayPos] = (int32_t)enCodeStrSize;
         }
         return 0;
     }
+
     if (PyBytes_Check(value)) {
         if (var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_CLOB)
         {
@@ -357,12 +359,14 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         }
         return 0;
     }
+    
     if (PyLong_Check(value)) {
         int32_t *iv = (int32_t *)var->data;
         iv[arrayPos] = PyLong_AsLong(value);
         var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
         return 0;
     }
+
     if (PyFloat_Check(value)) {
         double *dv = (double *)var->data;
         dv[arrayPos] = PyFloat_AsDouble(value);
@@ -382,7 +386,9 @@ int anpGetSize(PyObject * value)
         return 1;
     }
     if (PyUnicode_Check(value)) {
-        return PyUnicode_GET_LENGTH(value) + 1;
+        Py_ssize_t size = 0;
+        PyUnicode_AsUTF8AndSize(value, &size);
+        return (int)(size + 1);
     }
     if (PyBytes_Check(value)) {
         return (int)PyBytes_GET_SIZE(value) + 1;
