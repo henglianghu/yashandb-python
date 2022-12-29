@@ -65,7 +65,7 @@ static PyObject *anpErrorReduce(AnpError *error)
 
 static PyObject *anpErrorStr(AnpError *error)
 {
-    char errCodeMsg[30] = {{0}};
+    char errCodeMsg[30] = {0};
     if (error->line > 0) {
         sprintf(errCodeMsg, "[%d:%d]YAS-%05d ", error->line, error->column, error->code);
     } else {
