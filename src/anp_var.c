@@ -178,6 +178,10 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     YapiLobLocator* loc = (YapiLobLocator*)data;
     uint64_t length;
     yapiLobGetLength(hConn, loc, &length);
+    if (length == 0) {
+        Py_RETURN_NONE;
+    }
+
     if (type == YAPI_TYPE_BLOB) {
         length *= 2;
     }
