@@ -372,8 +372,15 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
     
     if (PyLong_Check(value)) {
-        int32_t *iv = (int32_t *)var->data;
-        iv[arrayPos] = PyLong_AsLong(value);
+        int64_t *iv = (int64_t *)var->data;
+        int64_t bindValue = PyLong_AsLongLong(value);
+        PyObject *pyError = PyErr_Occurred();
+        if ((bindValue == -1L) && (pyError != NULL)) {
+            PyErr_SetString(pyError, "fail to get long long value from PyObject");
+            return -1;
+        }
+        
+        iv[arrayPos] = bindValue;
         var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
         return 0;
     }
@@ -393,19 +400,23 @@ int anpGetSize(PyObject * value)
     if (value == Py_None) {
         return 1;
     }
+
     if (PyBool_Check(value)) {
         return 1;
     }
+
     if (PyUnicode_Check(value)) {
         Py_ssize_t size = 0;
         PyUnicode_AsUTF8AndSize(value, &size);
         return (int)(size + 1);
     }
+
     if (PyBytes_Check(value)) {
         return (int)PyBytes_GET_SIZE(value) + 1;
     }
+
     if (PyLong_Check(value)) {
-        return 4;
+        return 8;
     }
     if (PyFloat_Check(value)) {
         return 8;
@@ -429,7 +440,7 @@ YapiType anpGetType(PyObject * value)
         return YAPI_TYPE_BINARY;
     }
     if (PyLong_Check(value)) {
-        return YAPI_TYPE_INTEGER;
+        return YAPI_TYPE_BIGINT;
     }
     if (PyFloat_Check(value)) {
         return YAPI_TYPE_DOUBLE;

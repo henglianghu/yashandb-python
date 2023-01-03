@@ -70,6 +70,24 @@ class TestCase(test_base.TestBaseCase):
         data = ('+2021-03', '+25 14:15:20.000010')
         self.assertEqual(data, row)
         cursor.execute("drop table if exists test_bind_intval")
+
+    def test_bind_int_value(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_int_value")
+        cursor.execute("create table test_int_value(c1 bigint)")
+        cursor.execute("insert into test_int_value values(?)", (-9223372036854775808,))
+        cursor.execute("insert into test_int_value values(?)", (9223372036854775807,))
+        cursor.execute("select * from test_int_value")
+        row = cursor.fetchall()
+        data = [(-9223372036854775808,), (9223372036854775807,)]
+        self.assertEqual(data, row)
+        try:
+            cursor.execute("insert into test_int_value values(?)", (9223372036854775808,))
+        except OverflowError as e:
+            self.assertEquals(type(e), OverflowError)
+        else:
+            self.fail('OverflowError not rasied')
+        cursor.execute("drop table if exists test_int_value")
     
 
 if __name__ == "__main__":
