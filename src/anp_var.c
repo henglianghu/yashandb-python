@@ -351,7 +351,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
              {
                 return -1;
              }
-             var->indicator[arrayPos] = YAPI_NULL_DATA;
+             var->indicator[arrayPos] = 0;
              return 0;
         } else {
             strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
