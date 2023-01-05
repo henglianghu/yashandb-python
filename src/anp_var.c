@@ -288,8 +288,7 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
             break;
 
         case YAPI_TYPE_BINARY:
-            Py_ssize_t byteSize = (Py_ssize_t)var->indicator[pos];
-            result = PyBytes_FromStringAndSize(data, byteSize);
+            result = PyBytes_FromStringAndSize(data, (Py_ssize_t)var->indicator[pos]);
             break;
 
         case YAPI_TYPE_CLOB:
