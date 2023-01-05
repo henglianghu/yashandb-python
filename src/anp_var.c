@@ -83,7 +83,7 @@ YapiResult anpRegisteVarObject(PyObject* module)
     return YAPI_SUCCESS;
 }
 
-AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_ssize_t size, bool isArray)
+AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
     if (var == NULL) {
@@ -93,9 +93,12 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_s
     Py_INCREF(cursor->connection);
     var->connection = cursor->connection;
 
+    YapiType type = assist->type;
+    Py_ssize_t size = assist->size;
+
     var->size = (uint32_t)size;
-    var->elements = (uint32_t)numElements;
-    var->isArray = isArray;
+    var->elements = (uint32_t)assist->numElements;
+    var->isArray = assist->isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
     if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
@@ -105,10 +108,14 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_s
         var->transType = type;
     }
 
-    if(type != YAPI_TYPE_CLOB && type != YAPI_TYPE_BLOB && size > 8001)
-    {
-        var->transType = type == YAPI_TYPE_BINARY ? YAPI_TYPE_BLOB : YAPI_TYPE_CLOB;
-        var->dbType = var->transType;
+    if (bindIn && (size > CONVERT_TO_LOB_SIZE)) {
+        if ((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) {
+            var->transType = YAPI_TYPE_CLOB;
+            var->dbType = YAPI_TYPE_CLOB;
+        } else if(type == YAPI_TYPE_BINARY) {
+            var->transType = YAPI_TYPE_BLOB;
+            var->dbType = YAPI_TYPE_BLOB;
+        }
     }
     
     if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
@@ -455,7 +462,7 @@ void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type)
     *size = (Py_ssize_t)anpGetSize(value);
 }
 
-AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements)
+AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements, bool bindIn)
 {
     int isArray = 0;
     Py_ssize_t size = 0;
@@ -487,5 +494,8 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         size = anpGetSize(value);
         type = anpGetType(value);
     }
-    return anpNewVar(cursor, numElements, type, size, isArray);
+
+    VarAssist assist = {.isArray = isArray, .numElements = numElements,
+        .size = size, .type = type};
+    return anpNewVar(cursor, &assist, bindIn);
 }

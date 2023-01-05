@@ -88,6 +88,13 @@ class TestCase(test_base.TestBaseCase):
         else:
             self.fail('OverflowError not rasied')
         cursor.execute("drop table if exists test_int_value")
+
+    def test_fetch_long_str(self):
+        cursor = self.connection.cursor()
+        cursor.execute("select lpad('abcdef', 32000, '*') from dual")
+        rows = cursor.fetchone()
+        self.assertEqual(len(rows[0]), 32000)
+        cursor.execute("select lpad('abcdef', 32000, '*') from dual")
     
 
 if __name__ == "__main__":

@@ -230,7 +230,10 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
         varToSet = origVar;
         if (numElements >= origVar->elements) {
             anpAdjustVarTypeSize(value, &origVar->size, &origVar->dbType);
-            *newVar = anpNewVar(cursor, numElements, origVar->dbType, origVar->size, origVar->isArray);
+
+            VarAssist assist = { .isArray = origVar->isArray, .numElements = numElements, 
+                .size = origVar->size, .type = origVar->dbType};
+            *newVar = anpNewVar(cursor, &assist, true);
             if (!*newVar) {
                 return YAPI_ERROR;
             }
@@ -261,7 +264,7 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             // otherwise, create a new variable, unless the value is None and
             // we wish to defer type assignment
         } else if (value != Py_None || !deferTypeAssignment) {
-            *newVar = anpVarNewByValue(cursor, value, numElements);
+            *newVar = anpVarNewByValue(cursor, value, numElements, true);
             if (*newVar == NULL) {
                 return YAPI_ERROR;
             }
@@ -524,7 +527,9 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
         uint32_t size;
         anpGetColumnSize(&queryInfo, &size);
 
-        AnpVar* var = anpNewVar(cursor, cursor->fetchArraySize, queryInfo.type, size, 0);
+        VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type, 
+            .size = size, .isArray = false};
+        AnpVar* var = anpNewVar(cursor, &assist, false);
         if (var == NULL) {
             return -1;
         }

@@ -11,4 +11,6 @@ static inline uint32_t codSizeAlign4(uint32_t size)
     return (margin == 0) ? size : size + (4 - margin);
 }
 
+#define CONVERT_TO_LOB_SIZE (32000)
+
 #endif  // ANCHOR_ANP_VAR_H
