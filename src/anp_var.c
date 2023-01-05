@@ -218,7 +218,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     return var;
 }
 
-static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
+static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
 {
     char message[120];
     PyObject* result;
@@ -227,6 +227,9 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
     YapiTimestamp *timestamp;
     YapiDateStruct ds;
     
+    YapiType type = var->dbType;
+    char* data =  var->data + pos * var->size;
+
     switch (type) {
         case YAPI_TYPE_BOOL:
             result = PyBool_FromLong(*(int8_t*)data);
@@ -283,6 +286,12 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
         case YAPI_TYPE_DS_INTERVAL:
             result = PyUnicode_FromString(data);
             break;
+
+        case YAPI_TYPE_BINARY:
+            Py_ssize_t byteSize = (Py_ssize_t)var->indicator[pos];
+            result = PyBytes_FromStringAndSize(data, byteSize);
+            break;
+
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_BLOB:
             result = anpGetLobData(hConn, type, data);
@@ -303,7 +312,7 @@ PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos)
     if (var->indicator[pos] == YAPI_NULL_DATA) {
         Py_RETURN_NONE;
     }
-    return anpVarToPython(hConn, var->dbType, var->data + pos * var->size);
+    return anpVarToPython(hConn, var, pos);
 }
 
 int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
@@ -362,19 +371,23 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
 
     if (PyBytes_Check(value)) {
-        if (var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_CLOB)
-        {
+        if (var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_CLOB) {
              if (yapiLobWrite(hConn, (YapiLobLocator*)var->data, NULL, 
-                        (uint8_t*)value, (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS)
-             {
+                (uint8_t*)value, (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS) {
                 return -1;
              }
              var->indicator[arrayPos] = 0;
              return 0;
-        } else {
-            strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
-            var->indicator[arrayPos] = (int)PyBytes_GET_SIZE(value);
         }
+
+        Py_ssize_t byteSize = PyBytes_GET_SIZE(value);
+        if (byteSize == 0) {
+            var->indicator[arrayPos] = YAPI_NULL_DATA;
+            return 0;   
+        }
+
+        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
+        var->indicator[arrayPos] = (int)byteSize;
         return 0;
     }
     

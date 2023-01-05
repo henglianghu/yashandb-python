@@ -84,7 +84,7 @@ class TestCase(test_base.TestBaseCase):
         try:
             cursor.execute("insert into test_int_value values(?)", (9223372036854775808,))
         except OverflowError as e:
-            self.assertEquals(type(e), OverflowError)
+            self.assertEqual(type(e), OverflowError)
         else:
             self.fail('OverflowError not rasied')
         cursor.execute("drop table if exists test_int_value")
@@ -94,7 +94,39 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("select lpad('abcdef', 32000, '*') from dual")
         rows = cursor.fetchone()
         self.assertEqual(len(rows[0]), 32000)
-        cursor.execute("select lpad('abcdef', 32000, '*') from dual")
+    
+    def test_sdv_tb_python_ydbrd_6583_28_4(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_28_4")
+        cursor.execute("create table tb_python_ydbrd_6583_28_4(col1 raw(80), col2 int)")
+
+        i = 1
+        values = [b'', b'http://c.biancheng.net/python/', bytes('C语言中文网8岁了', encoding='UTF-8')]
+        for value in values:
+            cursor.execute("insert into tb_python_ydbrd_6583_28_4 values(?, ?)", (value, i, ))
+            i = i + 1
+        cursor.execute("select col1 from tb_python_ydbrd_6583_28_4")
+        results = cursor.fetchall()
+        print(results)
+        expectRs = [(None,), (b'http://c.biancheng.net/python/',), 
+            (b'C\xe8\xaf\xad\xe8\xa8\x80\xe4\xb8\xad\xe6\x96\x87\xe7\xbd\x918\xe5\xb2\x81\xe4\xba\x86',)]
+        self.assertEqual(results, expectRs)
+  
+        value1 = b'http://c.biancheng.net/python/'
+        cursor.execute("update tb_python_ydbrd_6583_28_4 set col1 = :1 where col2 = :2", (value1, 2,))
+        cursor.execute("select col1, col2  from  tb_python_ydbrd_6583_28_4 order by col2")
+        results = cursor.fetchmany(20)
+        expectRs = [(None, 1), (b'http://c.biancheng.net/python/', 2), 
+            (b'C\xe8\xaf\xad\xe8\xa8\x80\xe4\xb8\xad\xe6\x96\x87\xe7\xbd\x918\xe5\xb2\x81\xe4\xba\x86', 3)]
+        self.assertEqual(results, expectRs)
+
+        cursor.execute("delete from  tb_python_ydbrd_6583_28_4  where col1 = ?", (value1,))
+        cursor.execute("select col1,col2  from tb_python_ydbrd_6583_28_4 order by col2")
+        results = cursor.fetchmany(20)
+        expectRs = [(None, 1), (b'C\xe8\xaf\xad\xe8\xa8\x80\xe4\xb8\xad\xe6\x96\x87\xe7\xbd\x918\xe5\xb2\x81\xe4\xba\x86', 3)]
+        self.assertEqual(results, expectRs)
+
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_28_4")
     
 
 if __name__ == "__main__":

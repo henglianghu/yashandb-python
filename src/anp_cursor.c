@@ -403,7 +403,7 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
             break;
 
         case YAPI_TYPE_BINARY:
-            *bindSize = codSizeAlign4(desc->size * 2);
+            *bindSize = codSizeAlign4(desc->size);
             break;
 
         case YAPI_TYPE_DATE:
