@@ -176,6 +176,17 @@ class TestCase(test_base.TestBaseCase):
         rows = cursor.fetchall()
         expectRows = [(None, None), (None, None)]
         self.assertEqual(rows, expectRows)
+    
+    def test_fetch_clob(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_fetch_clob")
+        cursor.execute("create table test_fetch_clob(id int, c1 clob)")
+        cursor.execute("insert into test_fetch_clob values(1, lpad('abcdef', 32000, '*'))")
+        cursor.execute("update test_fetch_clob set c1 = c1||c1")
+        cursor.execute("select c1 from test_fetch_clob")
+        rows = cursor.fetchone()
+        self.assertEqual(len(rows[0]), 64000)
+        cursor.execute("drop table if exists test_fetch_clob")
 
 
 if __name__ == "__main__":
