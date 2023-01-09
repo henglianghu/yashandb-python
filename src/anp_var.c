@@ -83,7 +83,7 @@ YapiResult anpRegisteVarObject(PyObject* module)
     return YAPI_SUCCESS;
 }
 
-AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_ssize_t size, bool isArray)
+AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
     if (var == NULL) {
@@ -93,21 +93,29 @@ AnpVar* anpNewVar(AnpCursor* cursor, Py_ssize_t numElements, YapiType type, Py_s
     Py_INCREF(cursor->connection);
     var->connection = cursor->connection;
 
+    YapiType type = assist->type;
+    Py_ssize_t size = assist->size;
+
     var->size = (uint32_t)size;
-    var->elements = (uint32_t)numElements;
-    var->isArray = isArray;
+    var->elements = (uint32_t)assist->numElements;
+    var->isArray = assist->isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
-    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_ROWID){
+    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
+        type == YAPI_TYPE_YM_INTERVAL || type == YAPI_TYPE_DS_INTERVAL) {
         var->transType = YAPI_TYPE_VARCHAR;
     } else {
         var->transType = type;
     }
 
-    if(type != YAPI_TYPE_CLOB && type != YAPI_TYPE_BLOB && size > 8001)
-    {
-        var->transType = type == YAPI_TYPE_BINARY ? YAPI_TYPE_BLOB : YAPI_TYPE_CLOB;
-        var->dbType = var->transType;
+    if (bindIn && (size > CONVERT_TO_LOB_SIZE)) {
+        if ((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) {
+            var->transType = YAPI_TYPE_CLOB;
+            var->dbType = YAPI_TYPE_CLOB;
+        } else if(type == YAPI_TYPE_BINARY) {
+            var->transType = YAPI_TYPE_BLOB;
+            var->dbType = YAPI_TYPE_BLOB;
+        }
     }
     
     if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
@@ -177,6 +185,10 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     YapiLobLocator* loc = (YapiLobLocator*)data;
     uint64_t length;
     yapiLobGetLength(hConn, loc, &length);
+    if (length == 0) {
+        Py_RETURN_NONE;
+    }
+
     if (type == YAPI_TYPE_BLOB) {
         length *= 2;
     }
@@ -206,7 +218,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     return var;
 }
 
-static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
+static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
 {
     char message[120];
     PyObject* result;
@@ -215,7 +227,13 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
     YapiTimestamp *timestamp;
     YapiDateStruct ds;
     
+    YapiType type = var->dbType;
+    char* data =  var->data + pos * var->size;
+
     switch (type) {
+        case YAPI_TYPE_BOOL:
+            result = PyBool_FromLong(*(int8_t*)data);
+            break;
         case YAPI_TYPE_TINYINT:
             result = PyLong_FromLong(*(int8_t*)data);
             break;
@@ -263,8 +281,16 @@ static PyObject *anpVarToPython(YapiConnect* hConn, YapiType type, char* data)
         case YAPI_TYPE_VARCHAR:
         case YAPI_TYPE_NVARCHAR:
         case YAPI_TYPE_ROWID:
+        case YAPI_TYPE_BIT:
+        case YAPI_TYPE_YM_INTERVAL:
+        case YAPI_TYPE_DS_INTERVAL:
             result = PyUnicode_FromString(data);
             break;
+
+        case YAPI_TYPE_BINARY:
+            result = PyBytes_FromStringAndSize(data, (Py_ssize_t)var->indicator[pos]);
+            break;
+
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_BLOB:
             result = anpGetLobData(hConn, type, data);
@@ -285,7 +311,7 @@ PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos)
     if (var->indicator[pos] == YAPI_NULL_DATA) {
         Py_RETURN_NONE;
     }
-    return anpVarToPython(hConn, var->dbType, var->data + pos * var->size);
+    return anpVarToPython(hConn, var, pos);
 }
 
 int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
@@ -344,25 +370,36 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
 
     if (PyBytes_Check(value)) {
-        if (var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_CLOB)
-        {
+        if (var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_CLOB) {
              if (yapiLobWrite(hConn, (YapiLobLocator*)var->data, NULL, 
-                        (uint8_t*)value, (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS)
-             {
+                (uint8_t*)value, (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS) {
                 return -1;
              }
              var->indicator[arrayPos] = 0;
              return 0;
-        } else {
-            strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
-            var->indicator[arrayPos] = (int)PyBytes_GET_SIZE(value);
         }
+
+        Py_ssize_t byteSize = PyBytes_GET_SIZE(value);
+        if (byteSize == 0) {
+            var->indicator[arrayPos] = YAPI_NULL_DATA;
+            return 0;   
+        }
+
+        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
+        var->indicator[arrayPos] = (int)byteSize;
         return 0;
     }
     
     if (PyLong_Check(value)) {
-        int32_t *iv = (int32_t *)var->data;
-        iv[arrayPos] = PyLong_AsLong(value);
+        int64_t *iv = (int64_t *)var->data;
+        int64_t bindValue = PyLong_AsLongLong(value);
+        PyObject *pyError = PyErr_Occurred();
+        if ((bindValue == -1L) && (pyError != NULL)) {
+            PyErr_SetString(pyError, "fail to get long long value from PyObject");
+            return -1;
+        }
+        
+        iv[arrayPos] = bindValue;
         var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
         return 0;
     }
@@ -382,19 +419,23 @@ int anpGetSize(PyObject * value)
     if (value == Py_None) {
         return 1;
     }
+
     if (PyBool_Check(value)) {
         return 1;
     }
+
     if (PyUnicode_Check(value)) {
         Py_ssize_t size = 0;
         PyUnicode_AsUTF8AndSize(value, &size);
         return (int)(size + 1);
     }
+
     if (PyBytes_Check(value)) {
         return (int)PyBytes_GET_SIZE(value) + 1;
     }
+
     if (PyLong_Check(value)) {
-        return 4;
+        return 8;
     }
     if (PyFloat_Check(value)) {
         return 8;
@@ -418,7 +459,7 @@ YapiType anpGetType(PyObject * value)
         return YAPI_TYPE_BINARY;
     }
     if (PyLong_Check(value)) {
-        return YAPI_TYPE_INTEGER;
+        return YAPI_TYPE_BIGINT;
     }
     if (PyFloat_Check(value)) {
         return YAPI_TYPE_DOUBLE;
@@ -433,7 +474,7 @@ void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type)
     *size = (Py_ssize_t)anpGetSize(value);
 }
 
-AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements)
+AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements, bool bindIn)
 {
     int isArray = 0;
     Py_ssize_t size = 0;
@@ -465,5 +506,8 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         size = anpGetSize(value);
         type = anpGetType(value);
     }
-    return anpNewVar(cursor, numElements, type, size, isArray);
+
+    VarAssist assist = {.isArray = isArray, .numElements = numElements,
+        .size = size, .type = type};
+    return anpNewVar(cursor, &assist, bindIn);
 }

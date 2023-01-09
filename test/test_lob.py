@@ -44,7 +44,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into test_lob_1 values(NULL, NULL)")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
-        self.assertEqual(row, ('',''))
+        self.assertEqual(row, (None,None))
         self.cursor.execute("drop table if exists test_lob_1")
         self.cursor.execute("drop table if exists tb_python_blob_01_1")
         self.cursor.execute("create table tb_python_blob_01_1(col1 blob)")
@@ -53,7 +53,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into tb_python_blob_01_1 values('123')")
         self.cursor.execute("select col1 from tb_python_blob_01_1")
         result=self.cursor.fetchall()
-        self.assertEqual(result, [('0A',), ('',), ('0123',)])
+        self.assertEqual(result, [('0A',), (None,), ('0123',)])
         seed = "1234567890"
         str1 = []
         for i in range(32):
@@ -94,7 +94,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into tb_python_clob_02_1 values(1/0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000001,21)")
         self.cursor.execute("select col1,col2  from tb_python_clob_02_1 order by col2")
         result=self.cursor.fetchall()
-        self.assertEqual(result, [('',-2147483648), ('',-2147483648), ('123', 0), ('-1.797693134862315807', 8), ('1.0000000000000000000000000000000000E+89', 21), ('a', 2147483647)])
+        self.assertEqual(result, [(None,-2147483648), (None,-2147483648), ('123', 0), ('-1.797693134862315807', 8), ('1.0000000000000000000000000000000000E+89', 21), ('a', 2147483647)])
         self.cursor.execute("drop table if exists tb_python_clob_02_1")
         self.cursor.execute("drop table if exists tb_python_clob_06_1")
         self.cursor.execute("create table tb_python_clob_06_1(col1 clob,col2 int)")
@@ -109,7 +109,7 @@ class TestCase(test_base.TestBaseCase):
             i = i + 1
         self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
         result=self.cursor.fetchall()
-        self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15)])
+        self.assertEqual(result, [('abcdef', -1), (None, 0), (None, 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15)])
         self.cursor.execute("drop table if exists tb_python_clob_02_1")
         
         self.cursor.execute("drop table if exists tb_python_clob_06_1")
@@ -125,7 +125,7 @@ class TestCase(test_base.TestBaseCase):
             i = i + 1
         self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
         result=self.cursor.fetchall()
-        self.assertEqual(result, [('abcdef', -1), ('', 0), ('', 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15), ('aa', 16)])
+        self.assertEqual(result, [('abcdef', -1), (None, 0), (None, 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13), ('9', 14), ('df', 15), ('aa', 16)])
 
         self.cursor.execute("drop table if exists tb_python_clob_06_1")
         self.cursor.execute("create table tb_python_clob_06_1(col1 clob,col2 int)")
@@ -159,12 +159,35 @@ class TestCase(test_base.TestBaseCase):
 
         self.cursor.execute("select col1, col2 from tb_python_clob_03_1 order by col2")
         result=self.cursor.fetchall()
-        expectRow = [('', 0), ('AQD~!@#<F11>`abcdf', 1), ('中国@china~~~~！@#￥%……&*（）——+', 2), 
+        expectRow = [(None, 0), ('AQD~!@#<F11>`abcdf', 1), ('中国@china~~~~！@#￥%……&*（）——+', 2), 
         ('1234567890abcdef', 3), ('中国@china~~~~！@#￥%……&*（）——+', 4), ('9876543210', 5), 
-        ('AQD~!@i<fdfdf>#abcdf', 6), ('', 7), ("'fdsfdf我123", 8), ('"对方的"adfdf12', 9), ("'dfd'''''f!", 10)]
+        ('AQD~!@i<fdfdf>#abcdf', 6), (None, 7), ("'fdsfdf我123", 8), ('"对方的"adfdf12', 9), ("'dfd'''''f!", 10)]
         self.assertEqual(result, expectRow)
         #I4.删表
         self.cursor.execute("drop table if exists tb_python_clob_03_1")
+    
+    def test_lob_none(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_lob_none")
+        cursor.execute("create table test_lob_none(c1 clob, c2 blob)")
+        cursor.execute("insert into test_lob_none values('', '')")
+        cursor.execute("insert into test_lob_none values(null, null)")
+        cursor.execute("select * from test_lob_none")
+        rows = cursor.fetchall()
+        expectRows = [(None, None), (None, None)]
+        self.assertEqual(rows, expectRows)
+    
+    def test_fetch_clob(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_fetch_clob")
+        cursor.execute("create table test_fetch_clob(id int, c1 clob)")
+        cursor.execute("insert into test_fetch_clob values(1, lpad('abcdef', 32000, '*'))")
+        cursor.execute("update test_fetch_clob set c1 = c1||c1")
+        cursor.execute("select c1 from test_fetch_clob")
+        rows = cursor.fetchone()
+        self.assertEqual(len(rows[0]), 64000)
+        cursor.execute("drop table if exists test_fetch_clob")
+
 
 if __name__ == "__main__":
     test_base.run_test_cases()
