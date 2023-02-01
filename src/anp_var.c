@@ -340,6 +340,10 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
 {
     if (value == Py_None){
         var->indicator[arrayPos] = YAPI_NULL_DATA;
+        if (var->dbType == YAPI_TYPE_UNKNOWN) {
+            var->dbType = YAPI_TYPE_VARCHAR;
+        }
+        return 0;
     }
 
     if (PyBool_Check(value)) {

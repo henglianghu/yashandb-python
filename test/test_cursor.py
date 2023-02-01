@@ -232,5 +232,15 @@ class TestCase(test_base.TestBaseCase):
         cursor.close()
         conn.close()
 
+    def test_cursor_iter(self):
+        self.cursor.execute("drop table if exists test_cur_iter")
+        self.cursor.execute("create table test_cur_iter(c1 int,c2 varchar(20))")
+        self.cursor.execute("insert into test_cur_iter values(1, 'abcd')")
+        self.cursor.execute("select * from test_cur_iter")
+        data = (1, 'abcd')
+        for row in self.cursor:
+            self.assertEqual(row, data)
+        self.cursor.execute("drop table if exists test_cur_iter")
+
 if __name__ == "__main__":
     test_base.run_test_cases()
