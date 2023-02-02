@@ -225,6 +225,17 @@ class TestCase(test_base.TestBaseCase):
             self.assertGreaterEqual(row[1], 'aaa')
 
         self.cursor.execute("drop table if exists test_rowid")
+    
+    def test_fetch_many(self):
+        self.cursor.execute("drop table if exists test_fetch_many")
+        self.cursor.execute("create table test_fetch_many(c1 int,c2 varchar(20))")
+        self.cursor.execute("insert into test_fetch_many values(1, 'aaa')")
+        self.cursor.execute("insert into test_fetch_many values(2, 'bbb')")
+        self.cursor.execute("select * from test_fetch_many")
+        expectedData = [(1, 'aaa'), (2, 'bbb')]
+        rows = self.cursor.fetchmany()
+        self.assertEqual(rows, expectedData)
+        self.cursor.execute("drop table if exists test_fetch_many")
         
     def test_fix_6906(self):
         conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)

@@ -822,7 +822,7 @@ static PyObject* anpCursorFetch(AnpCursor* cursor, uint32_t fetchRows)
 
 static PyObject* anpCursorFetchMany(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
-    int32_t fetchRows = 0;
+    int32_t fetchRows = cursor->arraySize;
     static char*   keywordList[] = {"size", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "|i", keywordList, &fetchRows)) {
         return NULL;
