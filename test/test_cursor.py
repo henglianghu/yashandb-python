@@ -162,7 +162,7 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into test_date_1 values(1,'2000-10-10')")
         self.cursor.execute("select * from test_date_1")
         row = self.cursor.fetchone()
-        self.assertEqual(row[1], datetime.datetime(2000, 10, 10, 0, 0))
+        self.assertEqual(row[1], datetime.date(2000, 10, 10))
         self.cursor.execute("drop table if exists test_date_1")
         self.cursor.execute("create table test_date_1(id int,c1 time)")
         self.cursor.execute("insert into test_date_1 values(2,'11:11:11')")
