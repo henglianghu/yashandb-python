@@ -64,11 +64,13 @@ class TestCase(test_base.TestBaseCase):
     def test_bind_ds_insterval(self):
         cursor = self.connection.cursor()
         cursor.execute("drop table if exists test_bind_intval")
-        cursor.execute("create table test_bind_intval(a interval year(4) to month, b interval day(4) to second(5))")
-        cursor.execute("insert into test_bind_intval values(interval '2021-3' year(4) to month, interval '25 14:15:20.000005' day to second)")
+        cursor.execute("create table test_bind_intval(a interval year(4) to month, b interval day(4) to second(6))")
+        #interval '25 14:15:20.000005' day to second
+        timeDelta = datetime.timedelta(days=25, seconds=51320, microseconds=5)
+        cursor.execute("insert into test_bind_intval values(interval '2021-3' year(4) to month, ?)", (timeDelta, ))
         cursor.execute("select * from test_bind_intval")
         row = cursor.fetchone()
-        data = ('+2021-03', '+25 14:15:20.000010')
+        data = ('+2021-03', timeDelta)
         self.assertEqual(data, row)
         cursor.execute("drop table if exists test_bind_intval")
 
