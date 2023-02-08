@@ -1,4 +1,5 @@
 from decimal import Decimal
+import datetime
 
 import test_base
 
@@ -88,6 +89,42 @@ class TestCase(test_base.TestBaseCase):
         else:
             self.fail('OverflowError not rasied')
         cursor.execute("drop table if exists test_int_value")
+    
+    def test_bind_date_time(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_date_time")
+        cursor.execute("create table test_bind_date_time(c1 int, c2 timestamp)")
+        bindDateTime = datetime.datetime(2023, 2, 7, 15, 27, 55, 207261)
+        cursor.execute("insert into test_bind_date_time values(?, ?)", (1, bindDateTime))
+        cursor.execute("select * from test_bind_date_time")
+        expectedRow = (1, bindDateTime)
+        row = cursor.fetchone()
+        self.assertEqual(expectedRow, row)
+        cursor.execute("drop table if exists test_bind_date_time")
+    
+    def test_bind_date(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_date")
+        cursor.execute("create table test_bind_date(c1 int, c2 date)")
+        bindDate = datetime.date(2023, 2, 7)
+        cursor.execute("insert into test_bind_date values(?, ?)", (2, bindDate))
+        cursor.execute("select * from test_bind_date")
+        expectedRow = (2, bindDate)
+        row = cursor.fetchone()
+        self.assertEqual(expectedRow, row)
+        cursor.execute("drop table if exists test_bind_date")
+    
+    def test_bind_time(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_type_time")
+        cursor.execute("create table test_bind_type_time(c1 int, c2 time)")
+        bindTime = datetime.time(18, 2, 58, 123456)
+        cursor.execute("insert into test_bind_type_time values(?, ?)", (3, bindTime))
+        cursor.execute("select * from test_bind_type_time")
+        expectedRow = (3, bindTime)
+        row = cursor.fetchone()
+        self.assertEqual(expectedRow, row)
+        cursor.execute("drop table if exists test_bind_type_time")
 
     def test_fetch_long_str(self):
         cursor = self.connection.cursor()

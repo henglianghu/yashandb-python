@@ -261,19 +261,19 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
         case YAPI_TYPE_DATE:
             date = (YapiDate *)data;
             yapiGetDateStruct(*date, &ds);
-            result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
+            result =  PyDate_FromDate(ds.year, ds.month, ds.day);
             break;
         case YAPI_TYPE_SHORTTIME:
             time = (YapiShortTime *)data;
             yapiGetDateStruct(*time, &ds);
-            result = PyTime_FromTime(ds.hour, ds.minute, ds.second, ds.fraction/1000);
+            result = PyTime_FromTime(ds.hour, ds.minute, ds.second, ds.fraction);
             break;
         case YAPI_TYPE_TIMESTAMP:
         case YAPI_TYPE_TIMESTAMP_TZ:
         case YAPI_TYPE_TIMESTAMP_LTZ:
             timestamp = (YapiTimestamp*)data;
             yapiGetDateStruct(timestamp->stamp, &ds);
-            result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction/1000);
+            result =  PyDateTime_FromDateAndTime(ds.year, ds.month, ds.day, ds.hour, ds.minute, ds.second, ds.fraction);
             break;
  
         case YAPI_TYPE_CHAR:
@@ -410,6 +410,53 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         var->indicator[arrayPos] = (int32_t)sizeof(double);
         return 0;
     }
+
+    if (PyDateTime_Check(value)) {
+        YapiTimestamp *timeStamp = (YapiTimestamp*)var->data;
+        int year = PyDateTime_GET_YEAR(value);
+        int month = PyDateTime_GET_MONTH(value);
+        int day = PyDateTime_GET_DAY(value);
+        int hour = PyDateTime_DATE_GET_HOUR(value);
+        int minute = PyDateTime_DATE_GET_MINUTE(value);
+        int second = PyDateTime_DATE_GET_SECOND(value);
+        int microSec = PyDateTime_DATE_GET_MICROSECOND(value);
+        if (yapiTimestampSetTimestamp(timeStamp + arrayPos, (int16_t)year, (uint8_t)month, (uint8_t)day, (uint8_t)hour,
+            (uint8_t)minute, (uint8_t)second, (uint32_t)microSec) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnIntException();
+        }
+        var->indicator[arrayPos] = (int32_t)sizeof(YapiTimestamp);
+        
+        return 0;
+    }
+
+    if (PyDate_Check(value)) {
+        YapiDate *date = (YapiDate*)var->data;
+        int year = PyDateTime_GET_YEAR(value);
+        int month = PyDateTime_GET_MONTH(value);
+        int day = PyDateTime_GET_DAY(value);
+        if (yapiDateSetDate(date + arrayPos, (int16_t)year, (uint8_t)month, (uint8_t)day) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnIntException();
+        }
+        var->indicator[arrayPos] = (int32_t)sizeof(YapiDate);
+
+        return 0;
+    }
+
+    if (PyTime_Check(value)) {
+        YapiShortTime *shortTime = (YapiShortTime*)var->data;
+        int hour = PyDateTime_TIME_GET_HOUR(value);
+        int minute = PyDateTime_TIME_GET_MINUTE(value);
+        int second = PyDateTime_TIME_GET_SECOND(value);
+        int microSec = PyDateTime_TIME_GET_MICROSECOND(value);
+        if (yapiShortTimeSetShortTime(shortTime + arrayPos, (uint8_t)hour, (uint8_t)minute,
+            (uint8_t)second, (uint32_t)microSec) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnIntException();
+        }
+        var->indicator[arrayPos] = (int32_t)sizeof(YapiShortTime);
+
+        return 0;
+    }
+
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
     return -1;
 }
@@ -441,6 +488,18 @@ int anpGetSize(PyObject * value)
         return 8;
     }
 
+    if (PyDateTime_Check(value)) {
+        return sizeof(YapiTimestamp);
+    }
+
+    if (PyDate_Check(value)) {
+        return sizeof(YapiDate);
+    }
+
+    if (PyTime_Check(value)) {
+        return sizeof(YapiShortTime);
+    }
+
     return 0;
 }
 
@@ -449,20 +508,37 @@ YapiType anpGetType(PyObject * value)
     if (value == Py_None) {
         return 0;
     }
+
     if (PyBool_Check(value)) {
         return YAPI_TYPE_BOOL;
     }
+
     if (PyUnicode_Check(value)) {
         return YAPI_TYPE_VARCHAR;
     }
+
     if (PyBytes_Check(value)) {
         return YAPI_TYPE_BINARY;
     }
+
     if (PyLong_Check(value)) {
         return YAPI_TYPE_BIGINT;
     }
+
     if (PyFloat_Check(value)) {
         return YAPI_TYPE_DOUBLE;
+    }
+
+    if (PyDateTime_Check(value)) {
+        return YAPI_TYPE_TIMESTAMP;
+    }
+
+    if (PyDate_Check(value)) {
+        return YAPI_TYPE_DATE;
+    }
+
+    if (PyTime_Check(value)) {
+        return YAPI_TYPE_SHORTTIME;
     }
 
     return 0;
