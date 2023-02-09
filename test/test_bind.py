@@ -29,6 +29,18 @@ class TestCase(test_base.TestBaseCase):
         data = (2,20.0,50)
         self.assertEqual(data, row)
 
+    def test_bind_over(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_over")
+        cursor.execute("create table test_bind_over(c1 int , c2 varchar(10))")
+        try:
+            cursor.execute("insert into test_bind_over values(:1, :2)", (1, 2, 3))
+        except Exception as e:
+            error = str(e)
+            expectMsg = "YAS-00212 index 3 is out of [1, 2]"
+            self.assertEqual(error, expectMsg)
+        cursor.execute("drop table if exists test_bind_over")
+
     
 if __name__ == "__main__":
     test_base.run_test_cases()

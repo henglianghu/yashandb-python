@@ -344,14 +344,14 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB) {
         if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
-            return -1;
+            return anpRaiseAndReturnIntException();
         }
         return 0;
     }
 
     if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
-        return -1;
+        return anpRaiseAndReturnIntException();
     }
     return 0;
 }
