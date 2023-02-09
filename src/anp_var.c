@@ -102,7 +102,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
     if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
-        type == YAPI_TYPE_YM_INTERVAL || type == YAPI_TYPE_DS_INTERVAL) {
+        type == YAPI_TYPE_YM_INTERVAL) {
         var->transType = YAPI_TYPE_VARCHAR;
     } else {
         var->transType = type;
@@ -218,6 +218,23 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     return var;
 }
 
+static PyObject* anpVarToPyDelta(char* data)
+{
+    int dsDays;
+    int dsHours;
+    int dsMinutes;
+    int dsSeconds;
+    int dsMicroSecs;
+
+    YapiDSInterval dsInterval = *(YapiDSInterval*)data;
+    if (yapiDSIntervalGetDaySecond(dsInterval, &dsDays, &dsHours, &dsMinutes, &dsSeconds, &dsMicroSecs) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnNullException();
+    }
+
+    dsSeconds = dsHours * 60 * 60 + dsMinutes * 60 + dsSeconds;
+    return PyDelta_FromDSU(dsDays, dsSeconds, dsMicroSecs);
+}
+
 static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
 {
     char message[120];
@@ -283,8 +300,11 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
         case YAPI_TYPE_ROWID:
         case YAPI_TYPE_BIT:
         case YAPI_TYPE_YM_INTERVAL:
-        case YAPI_TYPE_DS_INTERVAL:
             result = PyUnicode_FromString(data);
+            break;
+
+        case YAPI_TYPE_DS_INTERVAL:
+            result = anpVarToPyDelta(data);
             break;
 
         case YAPI_TYPE_BINARY:
@@ -354,6 +374,24 @@ static int anpVarSetDecimal(AnpVar* var, uint32_t arrayPos, PyObject* value)
     strcpy(var->data + var->size*arrayPos, bindStr);
     var->indicator[arrayPos] = (int32_t)enCodeStrSize;
     Py_DECREF(strValue);
+    return 0;
+}
+
+static int anpVarSetPyDelta(AnpVar* var, uint32_t arrayPos, PyObject* value)
+{
+    YapiDSInterval *dsInterval = (YapiDSInterval*)var->data;
+    *(dsInterval + arrayPos) = 0;
+    int deltaSeconds = PyDateTime_DELTA_GET_SECONDS(value);
+    int hour = deltaSeconds / 3600;
+    int seconds = deltaSeconds % 3600;
+    int minutes = seconds / 60;
+    seconds = seconds % 60;
+    int microSeconds = PyDateTime_DELTA_GET_MICROSECONDS(value);
+    int days = PyDateTime_DELTA_GET_DAYS(value);
+    if (yapiDSIntervalSetDaySecond(dsInterval + arrayPos, days, hour, minutes, seconds, microSeconds) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnIntException();
+    }
+    var->indicator[arrayPos] = (int32_t)sizeof(YapiDSInterval);
     return 0;
 }
 
@@ -482,6 +520,10 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         return anpVarSetDecimal(var, arrayPos, value);
     }
 
+    if (PyDelta_Check(value)) {
+        return anpVarSetPyDelta(var, arrayPos, value);
+    }
+
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
     return -1;
 }
@@ -544,6 +586,10 @@ int anpGetSize(PyObject * value)
         return (int)(enCodeStrSize + 1);
     }
 
+    if (PyDelta_Check(value)) {
+        return sizeof(YapiDSInterval);
+    }
+
     return 0;
 }
 
@@ -587,6 +633,10 @@ YapiType anpGetType(PyObject * value)
 
     if (PyObject_TypeCheck(value, anpPyTypeDecimal)) {
         return YAPI_TYPE_VARCHAR;
+    }
+
+    if (PyDelta_Check(value)) {
+        return YAPI_TYPE_DS_INTERVAL;
     }
 
     return 0;
