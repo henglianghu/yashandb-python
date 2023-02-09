@@ -125,6 +125,18 @@ class TestCase(test_base.TestBaseCase):
         row = cursor.fetchone()
         self.assertEqual(expectedRow, row)
         cursor.execute("drop table if exists test_bind_type_time")
+    
+    def test_bind_decimal(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_type_decimal")
+        cursor.execute("create table test_bind_type_decimal(c1 int, c2 number)")
+        bindDecimal = Decimal('1234.56789')
+        cursor.execute("insert into test_bind_type_decimal values(?, ?)", (5, bindDecimal))
+        cursor.execute("select * from test_bind_type_decimal")
+        expectedRow = (5, bindDecimal)
+        row = cursor.fetchone()
+        self.assertEqual(expectedRow, row)
+        cursor.execute("drop table if exists test_bind_type_decimal")
 
     def test_fetch_long_str(self):
         cursor = self.connection.cursor()

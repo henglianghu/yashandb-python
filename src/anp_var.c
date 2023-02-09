@@ -336,6 +336,27 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     return 0;
 }
 
+static int anpVarSetDecimal(AnpVar* var, uint32_t arrayPos, PyObject* value) 
+{
+    PyObject *strValue = PyObject_Str(value);
+    if (!strValue) {
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "get decimal string failed");
+        return -1;
+    }
+
+    Py_ssize_t enCodeStrSize = 0;
+    const char* bindStr = PyUnicode_AsUTF8AndSize(strValue, &enCodeStrSize);
+    if (bindStr == NULL) {
+        Py_DECREF(strValue);
+        return -1;
+    }
+
+    strcpy(var->data + var->size*arrayPos, bindStr);
+    var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+    Py_DECREF(strValue);
+    return 0;
+}
+
 int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value)
 {
     if (value == Py_None){
@@ -457,6 +478,10 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         return 0;
     }
 
+    if (PyObject_TypeCheck(value, anpPyTypeDecimal)) {
+        return anpVarSetDecimal(var, arrayPos, value);
+    }
+
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
     return -1;
 }
@@ -484,6 +509,7 @@ int anpGetSize(PyObject * value)
     if (PyLong_Check(value)) {
         return 8;
     }
+
     if (PyFloat_Check(value)) {
         return 8;
     }
@@ -498,6 +524,24 @@ int anpGetSize(PyObject * value)
 
     if (PyTime_Check(value)) {
         return sizeof(YapiShortTime);
+    }
+
+    if (PyObject_TypeCheck(value, anpPyTypeDecimal)) {
+        PyObject *strValue = PyObject_Str(value);
+        if (!strValue) {
+            anpRaiseExceptionFromString(anpProgrammingErrorException, "get decimal string failed");
+            return -1;
+        }
+
+        Py_ssize_t enCodeStrSize = 0;
+        const char* bindStr = PyUnicode_AsUTF8AndSize(strValue, &enCodeStrSize);
+        if (bindStr == NULL) {
+            Py_DECREF(strValue);
+            return -1;
+        }
+
+        Py_DECREF(strValue);
+        return (int)(enCodeStrSize + 1);
     }
 
     return 0;
@@ -541,6 +585,10 @@ YapiType anpGetType(PyObject * value)
         return YAPI_TYPE_SHORTTIME;
     }
 
+    if (PyObject_TypeCheck(value, anpPyTypeDecimal)) {
+        return YAPI_TYPE_VARCHAR;
+    }
+
     return 0;
 }
 
@@ -580,6 +628,9 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
         }
     } else {
         size = anpGetSize(value);
+        if (size < 0) {
+            return NULL;
+        }
         type = anpGetType(value);
     }
 
