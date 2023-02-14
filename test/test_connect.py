@@ -74,6 +74,16 @@ class TestCase(test_base.TestBaseCase):
         conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
         cursor = conn.cursor()
         del cursor
+    
+    def test_connection_re_close(self):
+        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn.close()
+        try:
+            conn.close()
+        except Exception as e:
+            error = str(e)
+            expectMsg = "not connected"
+            self.assertEqual(error, expectMsg)
   
 if __name__ == '__main__':
     test_base.run_test_cases()

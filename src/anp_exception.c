@@ -66,10 +66,12 @@ static PyObject *anpErrorReduce(AnpError *error)
 static PyObject *anpErrorStr(AnpError *error)
 {
     char errCodeMsg[30] = {0};
-    if (error->line > 0) {
-        sprintf(errCodeMsg, "[%d:%d]YAS-%05d ", error->line, error->column, error->code);
-    } else {
-        sprintf(errCodeMsg, "YAS-%05d ", error->code);
+    if (error->code > 0) {
+        if (error->line > 0) {
+            sprintf(errCodeMsg, "[%d:%d]YAS-%05d ", error->line, error->column, error->code);
+        } else {
+            sprintf(errCodeMsg, "YAS-%05d ", error->code);
+        }
     }
 
     PyObject *pyErrCodeMsg = PyUnicode_Decode(errCodeMsg, strlen(errCodeMsg), NULL, NULL);

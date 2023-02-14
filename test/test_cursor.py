@@ -242,6 +242,18 @@ class TestCase(test_base.TestBaseCase):
         cursor = conn.cursor()
         cursor.close()
         conn.close()
+    
+    def test_cursor_re_close(self):
+        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.user, password=self.passwd)
+        cursor = conn.cursor()
+        cursor.close()
+        try:
+            cursor.close()
+        except Exception as e:
+            error = str(e)
+            expectMsg = "not open"
+            self.assertEqual(error, expectMsg)
+        conn.close()
 
 if __name__ == "__main__":
     test_base.run_test_cases()

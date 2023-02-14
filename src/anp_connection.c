@@ -90,8 +90,9 @@ static int anpConnectionInit(AnpConnection *conn, PyObject *args,
 static PyObject *anpConnectionClose(AnpConnection *conn, PyObject *args)
 {
     if (!anpConnectionIsConnected(conn)) {
-        return anpRaiseAndReturnNullException();
+        return NULL;
     }
+
     if (conn->hConn != NULL) {
         Py_BEGIN_ALLOW_THREADS
             yapiDisconnect(conn->hConn);
