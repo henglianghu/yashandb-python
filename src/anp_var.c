@@ -156,30 +156,6 @@ bool anpCheckVar(PyObject* object)
     return (Py_TYPE(object) == &anchorPyTypeVar);
 }
 
-static YapiResult anpLobBytes2Str(uint8_t* buf, uint64_t len)
-{
-    len *= 2;
-    char* strBuf = PyMem_Malloc(len);
-    if(strBuf == NULL)
-    {
-        return YAPI_ERROR;
-    }
-    uint32_t pos = 0;
-    uint32_t index;
-    uint8_t  value;
-    for (uint32_t i = 0; i < len; i++) {
-        index = i / 2;
-        value = pos % 8 ? buf[index] & 0xF : (buf[index] & 0xF0) >> 4;
-        strBuf[i] = value >= 10 ? value - 10 + 'A' : value + '0';
-        pos += 4;
-    }
-
-    memcpy(buf, strBuf, len);
-    buf[len] = '\0';
-    PyMem_Free(strBuf);
-    return YAPI_SUCCESS;
-}
-
 static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
 {
     YapiLobLocator* loc = (YapiLobLocator*)data;
@@ -189,11 +165,14 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
         Py_RETURN_NONE;
     }
     
+    if (type == YAPI_TYPE_CLOB) {
+        length = length * 4;
+    }
+
     char* readBuf = PyMem_Malloc(length + 1);
     if (readBuf == NULL) {
         return (PyObject*)PyErr_NoMemory();
     }
-    readBuf[length] = '\0';
     
     if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf, length) != YAPI_SUCCESS) {
         PyMem_Free(readBuf);
@@ -205,6 +184,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     if (type == YAPI_TYPE_BLOB) {
         var = PyBytes_FromStringAndSize(readBuf, (Py_ssize_t)length);
     } else {
+        readBuf[length] = '\0';
         var =  PyUnicode_FromString((char*)readBuf);
     }
 
