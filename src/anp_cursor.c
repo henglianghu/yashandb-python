@@ -692,10 +692,14 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
 static PyObject* anpCursorClose(AnpCursor* cursor, PyObject* args)
 {
-    if (anpCursorIsOpen(cursor) && cursor->hStmt != NULL) {
-        yapiReleaseStmt(cursor->hStmt);
+    if (!anpCursorIsOpen(cursor)) {
+        return NULL;
     }
-    cursor->hStmt = NULL;
+
+    if (cursor->hStmt != NULL) {
+        yapiReleaseStmt(cursor->hStmt);
+        cursor->hStmt = NULL;
+    }
     cursor->isOpen = false;
     Py_RETURN_NONE;
 }
