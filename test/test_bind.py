@@ -12,7 +12,7 @@ class TestCase(test_base.TestBaseCase):
         cursor = self.connection.cursor()
         cursor.execute("drop table if exists test_bind_param_heap_1")
         cursor.execute("create table test_bind_param_heap_1(a int, b double, c int)")
-        self.assertEqual(1, self.cursor.rowcount)
+        self.assertEqual(0, self.cursor.rowcount)
         cursor.execute("insert into test_bind_param_heap_1 values(:1, :2, 30)",(1,10))
         cursor.execute("insert into test_bind_param_heap_1 values(:1, :2, 40)",(2,20))
         self.connection.commit()

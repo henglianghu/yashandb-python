@@ -37,9 +37,9 @@ class TestCase(test_base.TestBaseCase):
 
     def test_ddl(self):
         self.cursor.execute("drop table if exists t_python")
-        self.assertEqual(self.cursor.rowcount, 1)
+        self.assertEqual(self.cursor.rowcount, 0)
         self.cursor.execute("create table t_python(id int, name varchar(256))")
-        self.assertEqual(self.cursor.rowcount, 1)
+        self.assertEqual(self.cursor.rowcount, 0)
 
     def test_cursor_count(self):
         self.cursor.execute("select count(*) from v$instance");
@@ -48,9 +48,9 @@ class TestCase(test_base.TestBaseCase):
 
     def test_cursor_all_num(self):
         self.cursor.execute("drop table if exists t_python_num")
-        self.assertEqual(self.cursor.rowcount, 1)
+        self.assertEqual(self.cursor.rowcount, 0)
         self.cursor.execute("create table t_python_num(int1 tinyint, int2 smallint, int3 integer, int4 bigint, int5 number(10,5), int6 float, int7 double )")
-        self.assertEqual(self.cursor.rowcount, 1)
+        self.assertEqual(self.cursor.rowcount, 0)
         self.cursor.execute('insert into t_python_num values(1,1,1,1,1,1,1)')
         self.connection.commit()
         self.cursor.execute('select * from t_python_num')
@@ -264,6 +264,18 @@ class TestCase(test_base.TestBaseCase):
         for row in self.cursor:
             self.assertEqual(row, data)
         self.cursor.execute("drop table if exists test_cur_iter")
+
+    def test_cursor_rowcount(self):
+        cursor = self.cursor
+        cursor.execute("drop table if exists test_cursor_row_count")
+        cursor.execute("create table test_cursor_row_count(c1 int, c2 varchar(50))")
+        self.assertEqual(cursor.rowcount, 0)
+        cursor.execute("insert into test_cursor_row_count (c1) values(1)")
+        self.assertEqual(cursor.rowcount, 1)
+        cursor.execute("insert into test_cursor_row_count values(1, 'abc'), (2, 'bcd'), (3, 'cde')")
+        self.assertEqual(cursor.rowcount, 3)
+        cursor.execute("drop table if exists tb_python_ydbrd_sit_30_2")
+        self.assertEqual(cursor.rowcount, 0)
 
 if __name__ == "__main__":
     test_base.run_test_cases()

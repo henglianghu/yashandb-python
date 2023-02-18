@@ -663,7 +663,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     if (numQueryColumns == 0) {
         if (cursor->sqlType >= YAPI_SQLTYPE_CREATE_DATABASE) {
-            cursor->rowCount = 1;
+            cursor->rowCount = 0;
             Py_RETURN_NONE;
         }
         // get the count of the rows affected
