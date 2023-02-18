@@ -179,6 +179,17 @@ class TestCase(test_base.TestBaseCase):
 
         cursor.execute("drop table if exists tb_python_ydbrd_6583_28_4")
     
+    def test_bind_none(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_bind_none")
+        cursor.execute("create table test_bind_none(c1 varchar(50), c2 int)")
+        cursor.execute("insert into test_bind_none values(?, ?)", (None, 6))
+        cursor.execute("select * from test_bind_none")
+        row = cursor.fetchone()
+        data = (None, 6)
+        self.assertEqual(data, row)
+        cursor.execute("drop table if exists test_bind_none")
+    
 
 if __name__ == "__main__":
     test_base.run_test_cases()

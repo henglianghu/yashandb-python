@@ -885,7 +885,7 @@ static PyObject* anpCursorNext(AnpCursor * cursor)
     if (ret != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
-    printf("anpCursorNext:%d\n", rows);
+    
     if (rows > 0) {
         return anpCursorCreateRow(cursor, 0);
     }
