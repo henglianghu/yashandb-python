@@ -6,7 +6,7 @@ import yaspy
 class TestCase(test_base.TestBaseCase):
     def test_lob(self):
         self.cursor.execute("drop table if exists test_lob_1")
-        self.cursor.execute("create table test_lob_1(id int,c1 clob)")
+        self.cursor.execute("create table test_lob_1(id int, c1 clob)")
         self.cursor.execute("insert into test_lob_1 values(1, 'b12a')")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
@@ -22,38 +22,40 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("insert into test_lob_1 values(3, lpad('00',20000,'abcd'))")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
+
         self.cursor.execute("drop table if exists test_lob_1")
         self.cursor.execute("create table test_lob_1(id int, c1 blob)")
-        self.cursor.execute("insert into test_lob_1 values(1,'b12aaa')")
+        self.cursor.execute("insert into test_lob_1 values(?, ?)", (1, b'b12aaa'))
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
-        self.assertEqual((1, 'B12AAA'), row)
+        self.assertEqual((1, b'b12aaa'), row)
         self.cursor.execute("delete from test_lob_1") 
-        self.cursor.execute("insert into test_lob_1 values(?, ?)", (2, 'aaaa'))
+        self.cursor.execute("insert into test_lob_1 values(?, ?)", (2, b'aaaa'))
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
-        self.assertEqual((2, 'AAAA'), row)
+        self.assertEqual((2, b'aaaa'), row)
         self.cursor.execute("drop table if exists test_lob_1")
-        self.cursor.execute("create table test_lob_1(c1 clob,c2 blob)")
-        self.cursor.execute("insert into test_lob_1 values('aaa', 'b12a')")
+        self.cursor.execute("create table test_lob_1(c1 clob, c2 blob)")
+        self.cursor.execute("insert into test_lob_1 values(?, ?)", ('aaa', b'b12a'))
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
-        data = ('aaa', 'B12A')
+        data = ('aaa', b'b12a')
         self.assertEqual(data, row)
         self.cursor.execute("delete from test_lob_1")
         self.cursor.execute("insert into test_lob_1 values(NULL, NULL)")
         self.cursor.execute("select * from test_lob_1")
         row = self.cursor.fetchone()
         self.assertEqual(row, (None,None))
+
         self.cursor.execute("drop table if exists test_lob_1")
         self.cursor.execute("drop table if exists tb_python_blob_01_1")
         self.cursor.execute("create table tb_python_blob_01_1(col1 blob)")
-        self.cursor.execute("insert into tb_python_blob_01_1 values('a')")
+        self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (b'a',))
         self.cursor.execute("insert into tb_python_blob_01_1 values('')")
-        self.cursor.execute("insert into tb_python_blob_01_1 values('123')")
+        self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (b'123',))
         self.cursor.execute("select col1 from tb_python_blob_01_1")
         result=self.cursor.fetchall()
-        self.assertEqual(result, [('0A',), (None,), ('0123',)])
+        self.assertEqual(result, [(b'a',), (None,), (b'123',)])
         seed = "1234567890"
         str1 = []
         for i in range(32):
@@ -176,6 +178,18 @@ class TestCase(test_base.TestBaseCase):
         rows = cursor.fetchall()
         expectRows = [(None, None), (None, None)]
         self.assertEqual(rows, expectRows)
+    
+    def test_fetch_blob(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_blob_fetch")
+        cursor.execute("create table test_blob_fetch(c1 int, c2 blob)")
+        binaryData = b'Some Binary Data'
+        cursor.execute("insert into test_blob_fetch values(?, ?)", (1, binaryData))
+        cursor.execute("select * from test_blob_fetch")
+        fetchRow = cursor.fetchone()
+        expectRow = (1, b'Some Binary Data')
+        self.assertEqual(fetchRow, expectRow)
+        cursor.execute("drop table if exists test_blob_fetch")
     
     def test_fetch_clob(self):
         cursor = self.connection.cursor()
