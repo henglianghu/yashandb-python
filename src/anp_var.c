@@ -188,10 +188,6 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     if (length == 0) {
         Py_RETURN_NONE;
     }
-
-    if (type == YAPI_TYPE_BLOB) {
-        length *= 2;
-    }
     
     char* readBuf = PyMem_Malloc(length + 1);
     if (readBuf == NULL) {
@@ -205,14 +201,13 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
         return anpRaiseAndReturnNullException();
     }
     
+    PyObject* var = NULL;
     if (type == YAPI_TYPE_BLOB) {
-        if (anpLobBytes2Str((uint8_t*)readBuf, length) != YAPI_SUCCESS) {
-            PyMem_Free(readBuf);
-            readBuf = NULL;
-            return anpRaiseAndReturnNullException();
-        }
+        var = PyBytes_FromStringAndSize(readBuf, (Py_ssize_t)length);
+    } else {
+        var =  PyUnicode_FromString((char*)readBuf);
     }
-    PyObject* var =  PyUnicode_FromString((char*)readBuf);
+
     PyMem_Free(readBuf);
     readBuf = NULL;
     return var;
