@@ -189,7 +189,30 @@ class TestCase(test_base.TestBaseCase):
         data = (None, 6)
         self.assertEqual(data, row)
         cursor.execute("drop table if exists test_bind_none")
-    
 
+    def test_fetch_clob_gbk(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tb_python_clob_06_1")
+        #I1.创建表
+        cursor.execute("create table tb_python_clob_06_1(col1 clob, col2 int)")
+        #I2.插入数据
+        cursor.execute("insert into tb_python_clob_06_1 values('abcdef',-1)")
+        cursor.execute("insert into tb_python_clob_06_1 values('',2)")
+        cursor.execute("insert into tb_python_clob_06_1 values('9012345678',3)")
+        cursor.execute("insert into tb_python_clob_06_1 values(null,0)")
+        #python的传参方式插入
+        values = ['1234567890adefkl','0','9','df','中国、。，。反对反对’;']
+        i = 12
+        for value in values:
+            cursor.execute("insert into tb_python_clob_06_1 values(?,?)", (value,i))
+            i = i + 1
+        cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
+        result=cursor.fetchall()
+        self.assertEqual(result,
+                         [('abcdef', -1), (None, 0), (None, 2), ('9012345678', 3), ('1234567890adefkl', 12), ('0', 13),
+                          ('9', 14), ('df', 15), ('中国、。，。反对反对’;', 16)])
+        cursor.execute("drop table if exists tb_python_clob_06_1")
+        cursor.close()
+    
 if __name__ == "__main__":
     test_base.run_test_cases()
