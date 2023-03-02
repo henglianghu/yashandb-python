@@ -524,6 +524,11 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
             return anpRaiseAndReturnIntException();
         }
 
+        if (queryInfo.type >= __YAPI_TYPES_COUNT__) {
+            anpRaiseExceptionFromString(anpNotSupportedException, "unsupported binding type");
+            return -1;
+        }
+
         uint32_t size;
         anpGetColumnSize(&queryInfo, &size);
 

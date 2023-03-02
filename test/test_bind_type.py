@@ -190,6 +190,26 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(data, row)
         cursor.execute("drop table if exists test_bind_none")
 
+    def test_fetch_json_unspport(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_sit_08_1")
+        cursor.execute("create table tb_python_ydbrd_6583_sit_08_1(id int, c1 json,c2 json) organization heap")
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(1, '{\"a\":1, \"b\":1}', '{\"a\":1, \"b\":1}')")
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(2, '{\"a\":2, \"b\":2}', '{\"a\":2, \"b\":2}')")
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(3, '{\"a\":3, \"b\":3}', '{\"a\":3, \"b\":3}')")
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(4, '{\"a\":4, \"b\":4}', '{\"a\":4, \"b\":4}')")
+        try:
+            cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 order by id")
+            self.assertFail("test json")
+        except Exception as e:
+            if 'unsupported binding type' not in str(e):
+                raise Exception("FAILED")
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_sit_08_1")
+
     def test_fetch_clob_gbk(self):
         cursor = self.connection.cursor()
         cursor.execute("drop table if exists tb_python_clob_06_1")
@@ -213,6 +233,6 @@ class TestCase(test_base.TestBaseCase):
                           ('9', 14), ('df', 15), ('中国、。，。反对反对’;', 16)])
         cursor.execute("drop table if exists tb_python_clob_06_1")
         cursor.close()
-    
+
 if __name__ == "__main__":
     test_base.run_test_cases()
