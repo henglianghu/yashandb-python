@@ -4,45 +4,32 @@
 #include "anp_var.h"
 
 
-static PyObject* anpCursorNew(PyTypeObject* type, PyObject* args, PyObject* keywordArgs)
+static int anpCursorInit(AnpCursor* cursor, PyObject* arguments, PyObject* keywordArgs)
 {
-    return type->tp_alloc(type, 0);
-}
-
-static int anpCursorInit(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
-{
-    static char*   keywordList[] = {"connection", "scrollable", NULL};
+    static char*   keywords[] = {"connection", "scrollable", NULL};
+    PyObject*      scrollObject;
     AnpConnection* connection;
-    PyObject*      scrollableObj;
 
     // parse arguments
-    scrollableObj = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "O!|O", keywordList, &anchorPyTypeConnection, &connection,
-                                     &scrollableObj)) {
+    scrollObject = NULL;
+    if (!PyArg_ParseTupleAndKeywords(arguments, keywordArgs, "O!|O", keywords, &anchorPyTypeConnection, &connection,
+                                     &scrollObject)) {
         return -1;
     }
 
     // initialize members
     Py_INCREF(connection);
-    cursor->connection = connection;
     cursor->arraySize = 100;
+    cursor->connection = connection;
     cursor->isOpen = 1;
     cursor->isFail = 0;
 
     return 0;
 }
 
-static void anpCursorFree(AnpCursor* cursor)
+static PyObject* anpCursorNew(PyTypeObject* type, PyObject* args, PyObject* keywordArgs)
 {
-    Py_CLEAR(cursor->fetchVariables);
-    Py_CLEAR(cursor->bindVariables);
-    if (cursor->hStmt != NULL) {
-        yapiReleaseStmt(cursor->hStmt);
-        cursor->hStmt = NULL;
-    }
-
-    Py_CLEAR(cursor->connection);
-    Py_TYPE(cursor)->tp_free((PyObject*)cursor);
+    return type->tp_alloc(type, 0);
 }
 
 static bool anpCursorIsOpen(AnpCursor* cursor)
@@ -891,6 +878,19 @@ static PyObject* anpCursorNext(AnpCursor * cursor)
     }
 
     return NULL;
+}
+
+static void anpCursorFree(AnpCursor* cursor)
+{
+    Py_CLEAR(cursor->fetchVariables);
+    Py_CLEAR(cursor->bindVariables);
+    if (cursor->hStmt != NULL) {
+        yapiReleaseStmt(cursor->hStmt);
+        cursor->hStmt = NULL;
+    }
+
+    Py_CLEAR(cursor->connection);
+    Py_TYPE(cursor)->tp_free((PyObject*)cursor);
 }
 
 static PyMethodDef anpMethods[] = {
