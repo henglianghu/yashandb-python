@@ -142,30 +142,32 @@ static PyObject *anpConnectionRollback(AnpConnection *conn, PyObject *args)
 static PyObject *anpConnectionNewCursor(AnpConnection *conn, PyObject *args,
                                         PyObject *keywordArgs)
 {
-    PyObject *createArgs, *result, *arg;
-    Py_ssize_t numArgs = 0, i;
+    PyObject *cursorArgs, *callResult, *tempArg;
+    Py_ssize_t argsCount = 0, i;
 
     if (!anpConnectionIsConnected(conn)) {
         return NULL;
     }
+
     if (args) {
-        numArgs = PyTuple_GET_SIZE(args);
+        argsCount = PyTuple_GET_SIZE(args);
     }
-    createArgs = PyTuple_New(1 + numArgs);
-    if (!createArgs) {
+    cursorArgs = PyTuple_New(1 + argsCount);
+    if (!cursorArgs) {
         return NULL;
     }
+    
     Py_INCREF(conn);
-    PyTuple_SET_ITEM(createArgs, 0, (PyObject*) conn);
-    for (i = 0; i < numArgs; i++) {
-        arg = PyTuple_GET_ITEM(args, i);
-        Py_INCREF(arg);
-        PyTuple_SET_ITEM(createArgs, i + 1, arg);
+    PyTuple_SET_ITEM(cursorArgs, 0, (PyObject*) conn);
+    for (i = 0; i < argsCount; i++) {
+        tempArg = PyTuple_GET_ITEM(args, i);
+        Py_INCREF(tempArg);
+        PyTuple_SET_ITEM(cursorArgs, i + 1, tempArg);
     }
-    result = PyObject_Call( (PyObject*) &anchorPyTypeCursor, createArgs,
+    callResult = PyObject_Call( (PyObject*) &anchorPyTypeCursor, cursorArgs,
                             keywordArgs);
-    Py_DECREF(createArgs);
-    return result;
+    Py_DECREF(cursorArgs);
+    return callResult;
 }
 
 bool anpConnectionIsConnected(AnpConnection *conn)
