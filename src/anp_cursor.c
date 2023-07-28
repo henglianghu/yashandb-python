@@ -530,7 +530,7 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 
         if( var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
         {
-            if (yapiBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, NULL) != YAPI_SUCCESS) {
+            if (yapiBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, var->indicator) != YAPI_SUCCESS) {
                 return anpRaiseAndReturnIntException();
             }
             continue;
