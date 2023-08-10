@@ -10,14 +10,12 @@ static int anpCursorInit(AnpCursor* cursor, PyObject* arguments, PyObject* keywo
     PyObject*      scrollObject;
     AnpConnection* connection;
 
-    // parse arguments
     scrollObject = NULL;
     if (!PyArg_ParseTupleAndKeywords(arguments, keywordArgs, "O!|O", keywords, &anchorPyTypeConnection, &connection,
                                      &scrollObject)) {
         return -1;
     }
 
-    // initialize members
     Py_INCREF(connection);
     cursor->arraySize = 100;
     cursor->connection = connection;
@@ -157,12 +155,10 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
 {
     int16_t queryColumns;
 
-    // make sure the cursor is open
     if (!anpCursorIsOpen(cursor)) {
         return NULL;
     }
 
-    // determine the number of query columns; if not a query return None
     if (cursor->hStmt == NULL) {
         Py_RETURN_NONE;
     }
@@ -173,13 +169,11 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
         Py_RETURN_NONE;
     }
 
-    // create a list of the required length
     PyObject* results = PyList_New(queryColumns);
     if (results == NULL) {
         return NULL;
     }
 
-    // create tuples corresponding to the select-items
     for (int16_t i = 0; i < queryColumns; i++) {
         PyObject* tuple = anpCursorItemDescription(cursor, i);
         if (tuple != NULL) {
@@ -202,10 +196,7 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
     *newVar = NULL;
     isValueVar = anpCheckVar(value);
 
-    // handle case where variable is already bound, either from a prior
-    // execution or a call to setinputsizes()
     if (oldVar != NULL) {
-        // if the value is a variable object, rebind it if necessary
         if (isValueVar != 0) {
             if ((PyObject*)oldVar != value) {
                 Py_INCREF(value);
@@ -227,29 +218,21 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             varToSet = *newVar;
         }
 
-        // attempt to set the value
         if (varToSet && anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
-            // executemany() should simply fail after the first element
             if (arrayPos > 0) {
                 return YAPI_ERROR;
             }
 
-            // clear the exception and try to create a new variable
             PyErr_Clear();
             Py_CLEAR(*newVar);
             oldVar = NULL;
         }
     }
 
-    // if no original variable used, create a new one
     if (oldVar == NULL) {
-        // if the value is a variable object, bind it directly
         if (isValueVar != 0) {
             Py_INCREF(value);
             *newVar = (AnpVar*)value;
-
-            // otherwise, create a new variable, unless the value is None and
-            // we wish to defer type assignment
         } else if (value != Py_None || !deferTypeAssignment) {
             *newVar = anpVarNewByValue(cursor, value, numElements, true);
             if (*newVar == NULL) {
@@ -456,13 +439,8 @@ YapiResult anpCursorPerformBind(AnpCursor* cursor)
     PyObject * key, *var;
     Py_ssize_t pos;
 
-    // ensure that input sizes are reset
-    // this is done before binding is attempted so that if binding fails and
-    // a new statement is prepared, the bind variables will be reset and
-    // spurious errors will not occur
     cursor->setInputSizes = 0;
 
-    // set values and perform binds for all bind variables
     if (!cursor->bindVariables) {
         return YAPI_SUCCESS;
     }
@@ -490,25 +468,19 @@ YapiResult anpCursorPerformBind(AnpCursor* cursor)
 
 static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 {
-    // if fetch variables already exist, nothing more to do (we are executing
-    // the same statement and therefore all defines have already been
-    // performed)
-    if (cursor->fetchVariables) {
+    if (cursor->fetchVariables != NULL) {
         return 0;
     }
 
-    // create a list corresponding to the number of items
     cursor->fetchVariables = PyList_New(numQueryColumns);
-    if (!cursor->fetchVariables) {
+    if (cursor->fetchVariables == NULL) {
         return -1;
     }
 
-    uint32_t     pos;
+    uint32_t pos;
     YapiColumnDesc queryInfo;
-    // create a variable for each of the query columns
     cursor->fetchArraySize = cursor->arraySize;
     for (pos = 0; pos < numQueryColumns; pos++) {
-        // get query information for the column position
         if (yapiDescribeCol2(cursor->hStmt, pos, &queryInfo) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
@@ -595,7 +567,6 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         }
     }
 
-    // make sure the cursor is open
     if (!anpCursorIsOpen(cursor)) {
         return NULL;
     }
@@ -609,7 +580,6 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_CLEAR(cursor->fetchVariables);
         Py_CLEAR(cursor->bindVariables);
 
-        // prepare the statement, if applicable
         char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
         Py_BEGIN_ALLOW_THREADS
             if (cursor->hStmt != NULL) {
@@ -631,7 +601,6 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
-    // perform binds
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0, 0) < 0) {
         return NULL;
     }
@@ -640,7 +609,6 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return NULL;
     }
 
-    // execute the statement
     Py_BEGIN_ALLOW_THREADS
         status = yapiExecute(cursor->hStmt);
     Py_END_ALLOW_THREADS
@@ -660,7 +628,6 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
             cursor->rowCount = 0;
             Py_RETURN_NONE;
         }
-        // get the count of the rows affected
         int32_t len;
         if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(uint64_t), &len)
             != YAPI_SUCCESS) {
@@ -671,9 +638,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         cursor->rowCount = 0;
     }
 
-    // for queries, return the cursor for convenience
     if (numQueryColumns <= 0) {
-        // for statements other than queries, simply return None
         Py_RETURN_NONE;
     }
 
@@ -703,7 +668,6 @@ static PyObject* anpCursorCreateRow(AnpCursor* cursor, uint32_t pos)
     PyObject * tuple, *item;
     Py_ssize_t i;
 
-    // bump row count as a new row has been found
     cursor->rowCount++;
 
     Py_ssize_t numItems = PyList_GET_SIZE(cursor->fetchVariables);
@@ -712,7 +676,6 @@ static PyObject* anpCursorCreateRow(AnpCursor* cursor, uint32_t pos)
         return NULL;
     }
 
-    // acquire the value for each item
     for (i = 0; i < numItems; i++) {
         AnpVar* var = (AnpVar*)PyList_GET_ITEM(cursor->fetchVariables, i);
         item = anpVarGetSingleValue(var->connection->hConn, var, pos);
