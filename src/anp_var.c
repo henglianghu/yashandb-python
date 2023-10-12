@@ -83,6 +83,14 @@ YapiResult anpRegisteVarObject(PyObject* module)
     return YAPI_SUCCESS;
 }
 
+bool anpVarIsLobType(AnpVar* var) {
+    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB) {
+        return true;
+    }
+
+    return false;
+}
+
 AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
@@ -118,8 +126,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
         }
     }
     
-    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
-    {
+    if (anpVarIsLobType(var)) {
         var->size = -1;
         YapiLobLocator* loc;
         if (yapiLobDescAlloc((YapiConnect*)var->connection->hConn, var->transType, (void**)&loc) != YAPI_SUCCESS)
@@ -288,6 +295,7 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
 
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_BLOB:
+        case YAPI_TYPE_NCLOB:
             result = anpGetLobData(hConn, type, data);
             break;
         default:

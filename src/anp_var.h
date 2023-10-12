@@ -39,5 +39,6 @@ PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos);
 int     anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value);
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements, bool bindIn);
 void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type);
+bool anpVarIsLobType(AnpVar* var);
 
 #endif  // ANCHOR_ANP_VAR_H

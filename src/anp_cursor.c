@@ -426,6 +426,7 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
 
         case YAPI_TYPE_BLOB:
         case YAPI_TYPE_CLOB:
+        case YAPI_TYPE_NCLOB:
             *bindSize = -1;
             break;
         default:
@@ -502,8 +503,7 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
 
-        if( var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB)
-        {
+        if (anpVarIsLobType(var)) {
             if (yapiBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, var->indicator) != YAPI_SUCCESS) {
                 return anpRaiseAndReturnIntException();
             }

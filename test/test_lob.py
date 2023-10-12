@@ -201,6 +201,33 @@ class TestCase(test_base.TestBaseCase):
         rows = cursor.fetchone()
         self.assertEqual(len(rows[0]), 64000)
         cursor.execute("drop table if exists test_fetch_clob")
+    
+    def test_nclob_fetch1(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_51_1")
+        cursor.execute("create table tb_python_ydbrd_6583_51_1(col1 int,col2 nclob)")
+        cursor.execute("insert into tb_python_ydbrd_6583_51_1 values(1,lpad('a',32000,'b'))")
+        cursor.execute("insert into tb_python_ydbrd_6583_51_1 values(2,null)")
+        cursor.execute("insert into tb_python_ydbrd_6583_51_1 values(3,'abc')")
+        cursor.execute("select col2 from tb_python_ydbrd_6583_51_1 where col1 = 3")
+        
+        fetchRow = cursor.fetchone()
+        expectRow = ('abc',)
+        self.assertEqual(fetchRow, expectRow)
+
+        values = ['aa中国!@#', '爱心❤[爱心]', None, '']
+        i = 4
+        for value in values:
+            cursor.execute("insert into tb_python_ydbrd_6583_51_1 values(?,?)", (i, value,))
+            i = i+ 1
+        cursor.execute("select col2 from tb_python_ydbrd_6583_51_1 where col1 = 4")
+        
+        fetchRow = cursor.fetchone()
+        expectRow = ('aa中国!@#',)
+        self.assertEqual(fetchRow, expectRow)
+
+        cursor.execute("drop table tb_python_ydbrd_6583_51_1")
+        cursor.close()
 
 
 if __name__ == "__main__":
