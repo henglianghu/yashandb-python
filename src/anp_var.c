@@ -109,7 +109,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
     var->isArray = assist->isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
-    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
+    if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_NUMBER_FLOAT || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
         type == YAPI_TYPE_YM_INTERVAL) {
         var->transType = YAPI_TYPE_VARCHAR;
     } else {
@@ -172,7 +172,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
         Py_RETURN_NONE;
     }
     
-    if (type == YAPI_TYPE_CLOB) {
+    if (type == YAPI_TYPE_CLOB || type == YAPI_TYPE_NCLOB) {
         length = length * 4;
     }
 
@@ -251,7 +251,8 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
         case YAPI_TYPE_DOUBLE:
             result =  PyFloat_FromDouble(*(double *)data);
             break;
-        case YAPI_TYPE_NUMBER: {
+        case YAPI_TYPE_NUMBER:
+        case YAPI_TYPE_NUMBER_FLOAT: {
             PyObject* stringObj = PyUnicode_Decode(data, strlen(data), NULL, NULL);
             result = PyObject_CallFunctionObjArgs((PyObject*)anpPyTypeDecimal, stringObj, NULL);
             Py_DECREF(stringObj);
