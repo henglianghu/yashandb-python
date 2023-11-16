@@ -85,6 +85,7 @@ uint32_t anpGetDisplaySize(YapiColumnDesc* desc)
             break;
 
         case YAPI_TYPE_NUMBER:
+        case YAPI_TYPE_NUMBER_FLOAT:
             displaySize = codSizeAlign4(desc->precision + 8);
             break;
 
@@ -413,6 +414,7 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
             break;
 
         case YAPI_TYPE_NUMBER:
+        case YAPI_TYPE_NUMBER_FLOAT:
             *bindSize = codSizeAlign4(desc->precision + 8);;
             break;
 
@@ -486,7 +488,7 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
             return anpRaiseAndReturnIntException();
         }
 
-        if (queryInfo.type >= __YAPI_TYPES_COUNT__) {
+        if ((queryInfo.type > YAPI_TYPE_CURSOR) && (queryInfo.type != YAPI_TYPE_NUMBER_FLOAT)) {
             anpRaiseExceptionFromString(anpNotSupportedException, "unsupported binding type");
             return -1;
         }
