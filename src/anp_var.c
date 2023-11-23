@@ -104,6 +104,14 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
     YapiType type = assist->type;
     Py_ssize_t size = assist->size;
 
+    // for executemany, char/varchar allocated size is max
+    if ((assist->numElements > 1) && bindIn && (size <= CONVERT_TO_LOB_SIZE)) {
+        if (((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) || (type == YAPI_TYPE_BINARY)) {
+            size = (Py_ssize_t) CONVERT_TO_LOB_SIZE;
+        }
+    }
+    var->dataOffset = 0;
+
     var->size = (uint32_t)size;
     var->elements = (uint32_t)assist->numElements;
     var->isArray = assist->isArray;
@@ -333,7 +341,12 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         return 0;
     }
 
-    if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
+    uint32_t bindSize = var->size;
+    if ((var->elements > 1) && (var->dataOffset > 0)) {
+        bindSize = -2;
+    }
+
+    if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, bindSize, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
@@ -410,8 +423,10 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
              }
              return 0;
         } else {
-            strcpy(var->data + var->size*arrayPos, bindStr);
+            strcpy(var->data + var->dataOffset, bindStr);
             var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += (enCodeStrSize + 1);
+            var->data[var->dataOffset - 1] = '\0';
         }
         return 0;
     }
@@ -432,8 +447,9 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
             return 0;   
         }
 
-        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
+        strcpy(var->data + var->dataOffset, PyBytes_AS_STRING(value));
         var->indicator[arrayPos] = (int)byteSize;
+        var->dataOffset += byteSize;
         return 0;
     }
     
