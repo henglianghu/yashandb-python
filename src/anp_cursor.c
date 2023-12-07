@@ -363,11 +363,13 @@ YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, ui
     }
 }
 
-void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize)
+void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize, uint32_t maxCharsetRatio)
 {
     switch (desc->type) {
         case YAPI_TYPE_CHAR:
         case YAPI_TYPE_VARCHAR:
+            *bindSize = codSizeAlign4(desc->size) * maxCharsetRatio + 1;
+            break;
         case YAPI_TYPE_NCHAR:
         case YAPI_TYPE_NVARCHAR:
             *bindSize = codSizeAlign4(desc->size) + 1;
@@ -493,8 +495,11 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
             return -1;
         }
 
+        uint32_t maxCharsetRatio = 1;
+        yapiGetConnAttr(cursor->connection->hConn, YAPI_ATTR_MAX_CHARSET_RATIO, &maxCharsetRatio, sizeof(uint32_t), NULL);
+
         uint32_t size;
-        anpGetColumnSize(&queryInfo, &size);
+        anpGetColumnSize(&queryInfo, &size, maxCharsetRatio);
 
         VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type, 
             .size = size, .isArray = false};
