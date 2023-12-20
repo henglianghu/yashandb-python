@@ -1461,8 +1461,7 @@ class YasDialect(default.DefaultDialect):
     sequences_optional = False
     postfetch_lastrowid = False
 
-    #default_paramstyle = "named"
-    default_paramstyle = "numeric"
+    default_paramstyle = "named"
     colspecs = colspecs
     ischema_names = ischema_names
     requires_name_normalize = True

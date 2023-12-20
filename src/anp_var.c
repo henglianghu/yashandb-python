@@ -33,8 +33,27 @@ static PyObject * anpVarGetType(AnpVar *var, void *unused)
     return PyLong_FromLong(var->dbType);
 }
 
+static PyObject* yaspyVarGetValues(AnpVar *var, void *unused)
+{
+    // temporarily only return one value
+    PyObject *values = PyList_New(1);
+    if (values == NULL) {
+        return NULL;
+    }
+
+    PyObject *singleValue = anpVarGetSingleValue(var->connection->hConn, var, 0);
+    if (singleValue == NULL) {
+        Py_DECREF(values);
+        return NULL;
+    }
+    PyList_SET_ITEM(values, 0, singleValue);
+
+    return values;
+}
+
 static PyGetSetDef anpCalcMembers[] = {
     { "type",           (getter)anpVarGetType,                   0, 0, 0 },
+    { "values",         (getter)yaspyVarGetValues,               0, 0, 0 },
     { NULL }
 };
 
@@ -91,7 +110,7 @@ bool anpVarIsLobType(AnpVar* var) {
     return false;
 }
 
-AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
+AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
     if (var == NULL) {
@@ -100,12 +119,16 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
 
     Py_INCREF(cursor->connection);
     var->connection = cursor->connection;
+    var->bindDir = 0;
+    if (assist->bindIn) {
+        var->bindDir = YAPI_PARAM_INPUT;
+    }
 
     YapiType type = assist->type;
     Py_ssize_t size = assist->size;
 
     // for executemany, char/varchar allocated size is max
-    if ((assist->numElements > 1) && bindIn && (size <= CONVERT_TO_LOB_SIZE)) {
+    if ((assist->numElements > 1) && assist->bindIn && (size <= CONVERT_TO_LOB_SIZE)) {
         if (((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) || (type == YAPI_TYPE_BINARY)) {
             size = (Py_ssize_t) CONVERT_TO_LOB_SIZE;
         }
@@ -124,7 +147,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
         var->transType = type;
     }
 
-    if (bindIn && (size > CONVERT_TO_LOB_SIZE)) {
+    if (assist->bindIn && (size > CONVERT_TO_LOB_SIZE)) {
         if ((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) {
             var->transType = YAPI_TYPE_CLOB;
             var->dbType = YAPI_TYPE_CLOB;
@@ -334,7 +357,7 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     }
 
     if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB) {
-        if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
+        if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
@@ -346,7 +369,7 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         bindSize = -2;
     }
 
-    if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, bindSize, var->bufferSize, var->indicator) !=
+    if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, var->data, bindSize, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
@@ -689,6 +712,6 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
     }
 
     VarAssist assist = {.isArray = isArray, .numElements = numElements,
-        .size = size, .type = type};
-    return anpNewVar(cursor, &assist, bindIn);
+        .size = size, .type = type, .bindIn = bindIn};
+    return anpNewVar(cursor, &assist);
 }

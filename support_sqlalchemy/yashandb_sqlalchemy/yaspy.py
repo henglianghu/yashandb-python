@@ -485,19 +485,20 @@ class _OracleInteger(sqltypes.Integer):
     def get_dbapi_type(self, dbapi):
         # see https://github.com/oracle/python-cx_Oracle/issues/
         # 208#issuecomment-409715955
-        return int
+        #return int
+        return dbapi.INTEGER
 
-    def _cx_oracle_var(self, dialect, cursor):
-        cx_Oracle = dialect.dbapi
-        return cursor.var(
-            cx_Oracle.STRING, 255, arraysize=cursor.arraysize, outconverter=int
-        )
+    # def _cx_oracle_var(self, dialect, cursor):
+    #     cx_Oracle = dialect.dbapi
+    #     return cursor.var(
+    #         cx_Oracle.STRING, 255, arraysize=cursor.arraysize, outconverter=int
+    #     )
 
-    def _cx_oracle_outputtypehandler(self, dialect):
-        def handler(cursor, name, default_type, size, precision, scale):
-            return self._cx_oracle_var(dialect, cursor)
+    # def _cx_oracle_outputtypehandler(self, dialect):
+    #     def handler(cursor, name, default_type, size, precision, scale):
+    #         return self._cx_oracle_var(dialect, cursor)
 
-        return handler
+    #     return handler
 
 
 class _OracleNumeric(sqltypes.Numeric):
@@ -704,8 +705,7 @@ class _OracleRowid(oracle.ROWID):
 
 class OracleCompiler_cx_oracle(OracleCompiler):
     # yaspy has not this attr
-    #_oracle_cx_sql_compiler = True
-    _oracle_cx_sql_compiler = False
+    _oracle_cx_sql_compiler = True
 
     def bindparam_string(self, name, **kw):
         quote = getattr(name, "quote", None)
@@ -800,15 +800,14 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
                                     value.read()
                                 ),
                             )
-
-                        elif dbtype in (
-                            cx_Oracle.BLOB,
-                            cx_Oracle.CLOB,
-                            cx_Oracle.NCLOB,
-                        ):
-                            self.out_parameters[name] = self.cursor.var(
-                                dbtype, outconverter=lambda value: value.read()
-                            )
+                        # elif dbtype in (
+                        #     cx_Oracle.BLOB,
+                        #     cx_Oracle.CLOB,
+                        #     cx_Oracle.NCLOB,
+                        # ):
+                        #     self.out_parameters[name] = self.cursor.var(
+                        #         dbtype, outconverter=lambda value: value.read()
+                        #     )
                         elif compat.py2k and isinstance(
                             type_impl, sqltypes.Unicode
                         ):

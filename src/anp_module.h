@@ -11,5 +11,17 @@
 extern YapiEnv* anpEnv;
 
 
+typedef struct yaspyApiType yaspyApiType;
+
+
+struct yaspyApiType
+{
+    PyObject_HEAD
+    const char *name;
+    PyObject *dbTypes;
+    YapiType defaultDbType;
+};
+
+extern PyTypeObject yasPyTypeApiType;
 
 #endif //ANCHOR_PYTHON_ANCHOR_API_H

@@ -2,6 +2,7 @@
 #include "structmember.h"
 #include "anp_exception.h"
 #include "anp_var.h"
+#include "anp_api_type.h"
 
 
 static int anpCursorInit(AnpCursor* cursor, PyObject* arguments, PyObject* keywordArgs)
@@ -210,8 +211,8 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             anpAdjustVarTypeSize(value, &oldVar->size, &oldVar->dbType);
 
             VarAssist assist = { .isArray = oldVar->isArray, .numElements = numElements,
-                .size = oldVar->size, .type = oldVar->dbType};
-            *newVar = anpNewVar(cursor, &assist, true);
+                .size = oldVar->size, .type = oldVar->dbType, .bindIn = true};
+            *newVar = anpNewVar(cursor, &assist);
             if (!*newVar) {
                 return YAPI_ERROR;
             }
@@ -501,8 +502,8 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
         anpGetColumnSize(&queryInfo, &size, maxCharsetRatio);
 
         VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type, 
-            .size = size, .isArray = false};
-        AnpVar* var = anpNewVar(cursor, &assist, false);
+            .size = size, .isArray = false, .bindIn = false};
+        AnpVar* var = anpNewVar(cursor, &assist);
         if (var == NULL) {
             return -1;
         }
@@ -542,6 +543,70 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
         }
     }
     return 0;
+}
+
+int yaspyGetDbTypeFromPyType(PyObject *type, YapiType *dbType) 
+{
+    int status = PyObject_IsInstance(type, (PyObject*)&yasPyTypeApiType);
+    if (status < 0) {
+        return -1;
+    }
+
+    if (status == 1) {
+        yaspyApiType *apiType = (yaspyApiType*)type;
+        *dbType = apiType->defaultDbType;
+        return 0;
+    }
+
+    PyErr_SetString(PyExc_TypeError, "expecting dbapi type");
+    return -1;
+}
+
+static int getDefaultTypeSize(YapiType type)
+{
+    int typeSize = 0;
+    switch (type)
+    {
+        case YAPI_TYPE_TINYINT:
+        case YAPI_TYPE_SMALLINT:
+        case YAPI_TYPE_INTEGER:
+        case YAPI_TYPE_BIGINT:
+            typeSize = 8;
+            break;
+        default:
+            typeSize = 20;
+            break;
+    }
+
+    return typeSize;
+}
+
+// create an anpVar for binding out parameter
+static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
+{
+    //add a arg for input/output ?
+    static char *keywordList[] = { "typ", "size", "arraysize"};
+    PyObject *type;
+
+    int size = 0;
+    int arraySize = 1;
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "O|ii", keywordList, &type, &size, &arraySize)) {
+        return NULL;
+    }
+
+    YapiType dbType = YAPI_TYPE_UNKNOWN;
+    if (yaspyGetDbTypeFromPyType(type, &dbType) < 0) {
+        return NULL;
+    }
+
+    if (size == 0) {
+        size = getDefaultTypeSize(dbType);
+    }
+    VarAssist assist = {.numElements = arraySize, .type = dbType, .size = size, .isArray = false, .bindIn = false};
+    AnpVar *var = anpNewVar(cursor, &assist);
+    var->bindDir = YAPI_PARAM_OUTPUT;
+
+    return var;
 }
 
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
@@ -995,7 +1060,7 @@ static PyMethodDef anpMethods[] = {
         {"nextset",      (PyCFunction) anpCursorNextSet,     METH_NOARGS},
         {"setinputsizes", (PyCFunction) anpCursorSetInputSizes, METH_VARARGS | METH_KEYWORDS },
         {"setoutputsize", (PyCFunction) anpCursorSetOutputSize, METH_VARARGS },
-
+        {"var",          (PyCFunction)yaspyCursorVar, METH_VARARGS | METH_KEYWORDS},
         {NULL, NULL}
 };
 
