@@ -25,7 +25,12 @@ static void anpVarFree(AnpVar *var)
 
 static PyObject * anpVarRepr(AnpVar *var)
 {
-    return NULL;
+    // temp support
+    if (var == NULL) {
+        return NULL;
+    }
+
+    return PyUnicode_FromFormat("<yaspy.Var type %d value>", var->dbType);
 }
 
 static PyObject * anpVarGetType(AnpVar *var, void *unused)

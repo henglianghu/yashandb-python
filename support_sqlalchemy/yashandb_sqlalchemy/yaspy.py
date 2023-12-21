@@ -760,6 +760,7 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
     def _generate_out_parameter_vars(self):
         # check for has_out_parameters or RETURNING, create cx_Oracle.var
         # objects if so
+        paramIndex = 0
         if self.compiled.returning or self.compiled.has_out_parameters:
             quoted_bind_names = self.compiled.escaped_bind_names
             for bindparam in self.compiled.binds.values():
@@ -822,9 +823,11 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
                             )
                         else:
                             self.out_parameters[name] = self.cursor.var(dbtype)
-                    self.parameters[0][
-                        quoted_bind_names.get(name, name)
-                    ] = self.out_parameters[name]
+                    # self.parameters[0][
+                    #     quoted_bind_names.get(name, name)
+                    # ] = self.out_parameters[name]
+                    self.parameters[0][paramIndex] = self.out_parameters[name]
+                paramIndex += 1
 
     def _generate_cursor_outputtype_handler(self):
         output_handlers = {}
@@ -1030,19 +1033,28 @@ class YasDialect_yaspy(YasDialect):
 
             # https://github.com/oracle/python-cx_Oracle/issues/176#issuecomment-386821291
             # https://github.com/oracle/python-cx_Oracle/issues/224
-            self._values_are_lists = self.cx_oracle_ver >= (6, 3)
-            if self._values_are_lists:
-                #cx_Oracle.__future__.dml_ret_array_val = True
+            # self._values_are_lists = self.cx_oracle_ver >= (6, 3)
+            # if self._values_are_lists:
+            #     #cx_Oracle.__future__.dml_ret_array_val = True
 
-                def _returningval(value):
+            #     def _returningval(value):
+            #         try:
+            #             return value.values[0][0]
+            #         except IndexError:
+            #             return None
+
+            #     self._returningval = _returningval
+            # else:
+            #     self._returningval = self._paramval
+
+            # adapt for yashan, temporarily only suppport single value for out parameter
+            def _returningval(value):
                     try:
-                        return value.values[0][0]
+                        return value.values[0]
                     except IndexError:
                         return None
 
-                self._returningval = _returningval
-            else:
-                self._returningval = self._paramval
+            self._returningval = _returningval
 
         self._is_cx_oracle_6 = self.cx_oracle_ver >= (6,)
 
