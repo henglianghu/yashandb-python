@@ -740,6 +740,8 @@ colspecs = {
 }
 
 ischema_names = {
+    "VARCHAR": VARCHAR,
+    "INTEGER": INTEGER,
     "VARCHAR2": VARCHAR,
     "NVARCHAR2": NVARCHAR,
     "CHAR": CHAR,
@@ -1789,7 +1791,7 @@ class YasDialect(default.DefaultDialect):
                 % (", ".join(["'%s'" % ts for ts in self.exclude_tablespaces]))
             )
         sql_str += (
-            "OWNER = :owner " "AND IOT_NAME IS NULL " "AND DURATION IS NULL"
+            "OWNER = :owner "  "AND DURATION IS NULL"
         )
 
         cursor = connection.execute(sql.text(sql_str), dict(owner=schema))
@@ -1808,7 +1810,6 @@ class YasDialect(default.DefaultDialect):
             )
         sql_str += (
             "OWNER = :owner "
-            "AND IOT_NAME IS NULL "
             "AND DURATION IS NOT NULL"
         )
 
@@ -1919,20 +1920,7 @@ class YasDialect(default.DefaultDialect):
         else:
             char_length_col = "data_length"
 
-        if self.server_version_info >= (12,):
-            identity_cols = """\
-                col.default_on_null,
-                (
-                    SELECT id.generation_type || ',' || id.IDENTITY_OPTIONS
-                    FROM ALL_TAB_IDENTITY_COLS%(dblink)s id
-                    WHERE col.table_name = id.table_name
-                    AND col.column_name = id.column_name
-                    AND col.owner = id.owner
-                ) AS identity_options""" % {
-                "dblink": dblink
-            }
-        else:
-            identity_cols = "NULL as default_on_null, NULL as identity_options"
+        identity_cols = "NULL as default_on_null, NULL as identity_options"
 
         params = {"table_name": table_name}
 
@@ -1946,7 +1934,6 @@ class YasDialect(default.DefaultDialect):
                 col.nullable,
                 col.data_default,
                 com.comments,
-                col.virtual_column,
                 %(identity_cols)s
             FROM all_tab_cols%(dblink)s col
             LEFT JOIN all_col_comments%(dblink)s com
@@ -1954,7 +1941,6 @@ class YasDialect(default.DefaultDialect):
             AND col.column_name = com.column_name
             AND col.owner = com.owner
             WHERE col.table_name = CAST(:table_name AS VARCHAR2(128))
-            AND col.hidden_column = 'NO'
         """
         if schema is not None:
             params["owner"] = schema
@@ -1967,7 +1953,6 @@ class YasDialect(default.DefaultDialect):
         }
 
         c = connection.execute(sql.text(text), params)
-
         for row in c:
             colname = self.normalize_name(row[0])
             orig_colname = row[0]
@@ -1978,9 +1963,9 @@ class YasDialect(default.DefaultDialect):
             nullable = row[5] == "Y"
             default = row[6]
             comment = row[7]
-            generated = row[8]
-            default_on_nul = row[9]
-            identity_options = row[10]
+            generated = 'NO'
+            default_on_nul = row[8]
+            identity_options = row[9]
 
             if coltype == "NUMBER":
                 if precision is None and scale == 0:
@@ -1990,7 +1975,7 @@ class YasDialect(default.DefaultDialect):
             elif coltype == "FLOAT":
                 # TODO: support "precision" here as "binary_precision"
                 coltype = FLOAT()
-            elif coltype in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR"):
+            elif coltype in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR","VARCHAR"):
                 coltype = self.ischema_names.get(coltype)(length)
             elif "WITH TIME ZONE" in coltype:
                 coltype = TIMESTAMP(timezone=True)
