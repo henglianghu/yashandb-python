@@ -460,9 +460,9 @@ import random
 import re
 
 from . import base as oracle
-from .base import OracleCompiler
+from .base import YasCompiler
 from .base import YasDialect
-from .base import OracleExecutionContext
+from .base import YasExecutionContext
 from sqlalchemy import exc
 from sqlalchemy import processors
 from sqlalchemy import types as sqltypes
@@ -703,7 +703,7 @@ class _OracleRowid(oracle.ROWID):
         return dbapi.ROWID
 
 
-class OracleCompiler_cx_oracle(OracleCompiler):
+class YasCompiler_yaspy(YasCompiler):
     # yaspy has not this attr
     _oracle_cx_sql_compiler = True
 
@@ -727,7 +727,7 @@ class OracleCompiler_cx_oracle(OracleCompiler):
             quoted_name = '"%s"' % name
             kw["escaped_from"] = name
             name = quoted_name
-            return OracleCompiler.bindparam_string(self, name, **kw)
+            return YasCompiler.bindparam_string(self, name, **kw)
 
         # TODO: we could likely do away with quoting altogether for
         # Oracle parameters and use the custom escaping here
@@ -751,10 +751,10 @@ class OracleCompiler_cx_oracle(OracleCompiler):
                 kw["escaped_from"] = name
                 name = new_name
 
-        return OracleCompiler.bindparam_string(self, name, **kw)
+        return YasCompiler.bindparam_string(self, name, **kw)
 
 
-class OracleExecutionContext_cx_oracle(OracleExecutionContext):
+class YasExecutionContext_yaspy(YasExecutionContext):
     out_parameters = None
 
     def _generate_out_parameter_vars(self):
@@ -921,8 +921,8 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
 
 class YasDialect_yaspy(YasDialect):
     supports_statement_cache = True
-    execution_ctx_cls = OracleExecutionContext_cx_oracle
-    statement_compiler = OracleCompiler_cx_oracle
+    execution_ctx_cls = YasExecutionContext_yaspy
+    statement_compiler = YasCompiler_yaspy
 
     supports_sane_rowcount = True
     supports_sane_multi_rowcount = True

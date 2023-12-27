@@ -765,7 +765,7 @@ ischema_names = {
 }
 
 
-class OracleTypeCompiler(compiler.GenericTypeCompiler):
+class YasTypeCompiler(compiler.GenericTypeCompiler):
     # Note:
     # Oracle DATE == DATETIME
     # Oracle does not allow milliseconds in DATE
@@ -890,7 +890,7 @@ class OracleTypeCompiler(compiler.GenericTypeCompiler):
         return "ROWID"
 
 
-class OracleCompiler(compiler.SQLCompiler):
+class YasCompiler(compiler.SQLCompiler):
     """Oracle compiler modifies the lexical structure of Select
     statements to work under non-ANSI configured Oracle databases, if
     the use_ansi flag is False.
@@ -903,7 +903,7 @@ class OracleCompiler(compiler.SQLCompiler):
 
     def __init__(self, *args, **kwargs):
         self.__wheres = {}
-        super(OracleCompiler, self).__init__(*args, **kwargs)
+        super(YasCompiler, self).__init__(*args, **kwargs)
 
     def visit_mod_binary(self, binary, operator, **kw):
         return "mod(%s, %s)" % (
@@ -942,13 +942,13 @@ class OracleCompiler(compiler.SQLCompiler):
             return ""
 
     def visit_function(self, func, **kw):
-        text = super(OracleCompiler, self).visit_function(func, **kw)
+        text = super(YasCompiler, self).visit_function(func, **kw)
         if kw.get("asfrom", False):
             text = "TABLE (%s)" % text
         return text
 
     def visit_table_valued_column(self, element, **kw):
-        text = super(OracleCompiler, self).visit_table_valued_column(
+        text = super(YasCompiler, self).visit_table_valued_column(
             element, **kw
         )
         text = text + ".COLUMN_VALUE"
@@ -1308,7 +1308,7 @@ class OracleCompiler(compiler.SQLCompiler):
             )
 
 
-class OracleDDLCompiler(compiler.DDLCompiler):
+class YasDDLCompiler(compiler.DDLCompiler):
     def define_constraint_cascades(self, constraint):
         text = ""
         if constraint.ondelete is not None:
@@ -1339,7 +1339,7 @@ class OracleDDLCompiler(compiler.DDLCompiler):
         text = "CREATE "
         if index.unique:
             text += "UNIQUE "
-        if index.dialect_options["oracle"]["bitmap"]:
+        if index.dialect_options["yashandb"]["bitmap"]:
             text += "BITMAP "
         text += "INDEX %s ON %s (%s)" % (
             self._prepared_index_name(index, include_schema=True),
@@ -1351,18 +1351,18 @@ class OracleDDLCompiler(compiler.DDLCompiler):
                 for expr in index.expressions
             ),
         )
-        if index.dialect_options["oracle"]["compress"] is not False:
-            if index.dialect_options["oracle"]["compress"] is True:
+        if index.dialect_options["yashandb"]["compress"] is not False:
+            if index.dialect_options["yashandb"]["compress"] is True:
                 text += " COMPRESS"
             else:
                 text += " COMPRESS %d" % (
-                    index.dialect_options["oracle"]["compress"]
+                    index.dialect_options["yashandb"]["compress"]
                 )
         return text
 
     def post_create_table(self, table):
         table_opts = []
-        opts = table.dialect_options["oracle"]
+        opts = table.dialect_options["yashandb"]
 
         if opts["on_commit"]:
             on_commit_options = opts["on_commit"].replace("_", " ").upper()
@@ -1377,7 +1377,7 @@ class OracleDDLCompiler(compiler.DDLCompiler):
         return "".join(table_opts)
 
     def get_identity_options(self, identity_options):
-        text = super(OracleDDLCompiler, self).get_identity_options(
+        text = super(YasDDLCompiler, self).get_identity_options(
             identity_options
         )
         text = text.replace("NO MINVALUE", "NOMINVALUE")
@@ -1415,7 +1415,7 @@ class OracleDDLCompiler(compiler.DDLCompiler):
         return text
 
 
-class OracleIdentifierPreparer(compiler.IdentifierPreparer):
+class YasIdentifierPreparer(compiler.IdentifierPreparer):
 
     reserved_words = {x.lower() for x in RESERVED_WORDS}
     illegal_initial_characters = {str(dig) for dig in range(0, 10)}.union(
@@ -1433,12 +1433,12 @@ class OracleIdentifierPreparer(compiler.IdentifierPreparer):
 
     def format_savepoint(self, savepoint):
         name = savepoint.ident.lstrip("_")
-        return super(OracleIdentifierPreparer, self).format_savepoint(
+        return super(YasIdentifierPreparer, self).format_savepoint(
             savepoint, name
         )
 
 
-class OracleExecutionContext(default.DefaultExecutionContext):
+class YasExecutionContext(default.DefaultExecutionContext):
     def fire_sequence(self, seq, type_):
         return self._execute_scalar(
             "SELECT "
@@ -1475,11 +1475,11 @@ class YasDialect(default.DefaultDialect):
     supports_empty_insert = False
     supports_identity_columns = True
 
-    statement_compiler = OracleCompiler
-    ddl_compiler = OracleDDLCompiler
-    type_compiler = OracleTypeCompiler
-    preparer = OracleIdentifierPreparer
-    execution_ctx_cls = OracleExecutionContext
+    statement_compiler = YasCompiler
+    ddl_compiler = YasDDLCompiler
+    type_compiler = YasTypeCompiler
+    preparer = YasIdentifierPreparer
+    execution_ctx_cls = YasExecutionContext
 
     reflection_options = ("oracle_resolve_synonyms",)
 
@@ -2177,10 +2177,10 @@ class YasDialect(default.DefaultDialect):
             index["unique"] = uniqueness.get(rset.uniqueness, False)
 
             if rset.index_type in ("BITMAP", "FUNCTION-BASED BITMAP"):
-                index["dialect_options"]["oracle_bitmap"] = True
+                index["dialect_options"]["yashandb_bitmap"] = True
             if enabled.get(rset.compression, False):
                 index["dialect_options"][
-                    "oracle_compress"
+                    "yashandb_compress"
                 ] = rset.prefix_length
 
             # filter out Oracle SYS_NC names.  could also do an outer join
