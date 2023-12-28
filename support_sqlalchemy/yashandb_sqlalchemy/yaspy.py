@@ -707,52 +707,6 @@ class YasCompiler_yaspy(YasCompiler):
     # yaspy has not this attr
     _oracle_cx_sql_compiler = True
 
-    def bindparam_string(self, name, **kw):
-        quote = getattr(name, "quote", None)
-        if (
-            quote is True
-            or quote is not False
-            and self.preparer._bindparam_requires_quotes(name)
-            # bind param quoting for Oracle doesn't work with post_compile
-            # params.  For those, the default bindparam_string will escape
-            # special chars, and the appending of a number "_1" etc. will
-            # take care of reserved words
-            and not kw.get("post_compile", False)
-        ):
-            # interesting to note about expanding parameters - since the
-            # new parameters take the form <paramname>_<int>, at least if
-            # they are originally formed from reserved words, they no longer
-            # need quoting :).    names that include illegal characters
-            # won't work however.
-            quoted_name = '"%s"' % name
-            kw["escaped_from"] = name
-            name = quoted_name
-            return YasCompiler.bindparam_string(self, name, **kw)
-
-        # TODO: we could likely do away with quoting altogether for
-        # Oracle parameters and use the custom escaping here
-        escaped_from = kw.get("escaped_from", None)
-        if not escaped_from:
-
-            if _ORACLE_BIND_TRANSLATE_RE.search(name):
-                # not quite the translate use case as we want to
-                # also get a quick boolean if we even found
-                # unusual characters in the name
-                new_name = _ORACLE_BIND_TRANSLATE_RE.sub(
-                    lambda m: _ORACLE_BIND_TRANSLATE_CHARS[m.group(0)],
-                    name,
-                )
-                if new_name[0].isdigit() or new_name[0] == "_":
-                    new_name = "D" + new_name
-                kw["escaped_from"] = name
-                name = new_name
-            elif name[0].isdigit() or name[0] == "_":
-                new_name = "D" + name
-                kw["escaped_from"] = name
-                name = new_name
-
-        return YasCompiler.bindparam_string(self, name, **kw)
-
 
 class YasExecutionContext_yaspy(YasExecutionContext):
     out_parameters = None
