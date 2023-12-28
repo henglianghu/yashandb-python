@@ -783,37 +783,6 @@ class YasExecutionContext_yaspy(YasExecutionContext):
                     self.parameters[0][paramIndex] = self.out_parameters[name]
                 paramIndex += 1
 
-    def _generate_cursor_outputtype_handler(self):
-        output_handlers = {}
-
-        for (keyname, name, objects, type_) in self.compiled._result_columns:
-            handler = type_._cached_custom_processor(
-                self.dialect,
-                "cx_oracle_outputtypehandler",
-                self._get_cx_oracle_type_handler,
-            )
-
-            if handler:
-                denormalized_name = self.dialect.denormalize_name(keyname)
-                output_handlers[denormalized_name] = handler
-
-        if output_handlers:
-            default_handler = self._dbapi_connection.outputtypehandler
-
-            def output_type_handler(
-                cursor, name, default_type, size, precision, scale
-            ):
-                if name in output_handlers:
-                    return output_handlers[name](
-                        cursor, name, default_type, size, precision, scale
-                    )
-                else:
-                    return default_handler(
-                        cursor, name, default_type, size, precision, scale
-                    )
-
-            self.cursor.outputtypehandler = output_type_handler
-
     def _get_cx_oracle_type_handler(self, impl):
         if hasattr(impl, "_cx_oracle_outputtypehandler"):
             return impl._cx_oracle_outputtypehandler(self.dialect)
@@ -827,8 +796,6 @@ class YasExecutionContext_yaspy(YasExecutionContext):
         self.out_parameters = {}
 
         self._generate_out_parameter_vars()
-
-        self._generate_cursor_outputtype_handler()
 
         self.include_set_input_sizes = self.dialect._include_setinputsizes
 
