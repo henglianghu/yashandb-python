@@ -212,11 +212,41 @@ static int anpSetAutoCommit(AnpConnection *conn, PyObject *value, void *closure)
     return 0;
 }
 
+static PyObject *yaspyConnection_contextManagerEnter(AnpConnection *conn, PyObject* args)
+{
+    if (!anpConnectionIsConnected(conn)) {
+        return NULL;
+    }
+
+    Py_INCREF(conn);
+    return (PyObject*) conn;
+}
+
+static PyObject *yaspyConnection_contextManagerExit(AnpConnection *conn, PyObject* args)
+{
+    PyObject *excType, *excValue, *excTraceback, *result;
+
+    if (!PyArg_ParseTuple(args, "OOO", &excType, &excValue, &excTraceback)) {
+        return NULL;
+    }
+
+    result = anpConnectionClose(conn, NULL);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    Py_DECREF(result);
+    Py_INCREF(Py_False);
+    return Py_False;
+}
+
 static PyMethodDef anpMethods[] = {
         { "close",    (PyCFunction) anpConnectionClose,     METH_NOARGS },
         { "commit",   (PyCFunction) anpConnectionCommit,    METH_NOARGS },
         { "rollback", (PyCFunction) anpConnectionRollback,  METH_NOARGS },
         { "cursor",   (PyCFunction) anpConnectionNewCursor, METH_VARARGS | METH_KEYWORDS },
+        { "__enter__", (PyCFunction) yaspyConnection_contextManagerEnter,  METH_NOARGS },
+        { "__exit__", (PyCFunction) yaspyConnection_contextManagerExit,    METH_VARARGS },
         { NULL }
 };
 

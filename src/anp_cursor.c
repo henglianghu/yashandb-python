@@ -606,7 +606,7 @@ static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* key
     AnpVar *var = anpNewVar(cursor, &assist);
     var->bindDir = YAPI_PARAM_OUTPUT;
 
-    return var;
+    return (PyObject*)var;
 }
 
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
@@ -1049,6 +1049,31 @@ static void anpCursorFree(AnpCursor* cursor)
     Py_TYPE(cursor)->tp_free((PyObject*)cursor);
 }
 
+static PyObject *yaspyCursor_contextManagerEnter(AnpCursor *cursor,
+        PyObject* args)
+{
+    Py_INCREF(cursor);
+    return (PyObject*) cursor;
+}
+
+static PyObject *yaspyCursor_contextManagerExit(AnpCursor *cursor,
+        PyObject* args)
+{
+    PyObject *excType, *excValue, *excTraceback, *result;
+    if (!PyArg_ParseTuple(args, "OOO", &excType, &excValue, &excTraceback)) {
+        return NULL;
+    }
+
+    result = anpCursorClose(cursor, NULL);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    Py_DECREF(result);
+    Py_INCREF(Py_False);
+    return Py_False;
+}
+
 static PyMethodDef anpMethods[] = {
         {"callproc",     (PyCFunction) anpCursorCallProc,    METH_VARARGS  | METH_KEYWORDS },
         {"close",        (PyCFunction) anpCursorClose,       METH_NOARGS},
@@ -1061,6 +1086,8 @@ static PyMethodDef anpMethods[] = {
         {"setinputsizes", (PyCFunction) anpCursorSetInputSizes, METH_VARARGS | METH_KEYWORDS },
         {"setoutputsize", (PyCFunction) anpCursorSetOutputSize, METH_VARARGS },
         {"var",          (PyCFunction)yaspyCursorVar, METH_VARARGS | METH_KEYWORDS},
+        { "__enter__",   (PyCFunction) yaspyCursor_contextManagerEnter, METH_NOARGS },
+        { "__exit__",    (PyCFunction) yaspyCursor_contextManagerExit, METH_VARARGS },
         {NULL, NULL}
 };
 
