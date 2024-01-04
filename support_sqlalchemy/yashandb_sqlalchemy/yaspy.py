@@ -483,23 +483,7 @@ _ORACLE_BIND_TRANSLATE_CHARS = dict(zip("%():[]./? ", "PAZCCCCCCCC"))
 
 class _OracleInteger(sqltypes.Integer):
     def get_dbapi_type(self, dbapi):
-        # see https://github.com/oracle/python-cx_Oracle/issues/
-        # 208#issuecomment-409715955
-        #return int
         return dbapi.INTEGER
-
-    # def _cx_oracle_var(self, dialect, cursor):
-    #     cx_Oracle = dialect.dbapi
-    #     return cursor.var(
-    #         cx_Oracle.STRING, 255, arraysize=cursor.arraysize, outconverter=int
-    #     )
-
-    # def _cx_oracle_outputtypehandler(self, dialect):
-    #     def handler(cursor, name, default_type, size, precision, scale):
-    #         return self._cx_oracle_var(dialect, cursor)
-
-    #     return handler
-
 
 class _OracleNumeric(sqltypes.Numeric):
     is_number = False
@@ -712,76 +696,69 @@ class YasExecutionContext_yaspy(YasExecutionContext):
     out_parameters = None
 
     def _generate_out_parameter_vars(self):
-        # check for has_out_parameters or RETURNING, create cx_Oracle.var
-        # objects if so
         paramIndex = 0
         if self.compiled.returning or self.compiled.has_out_parameters:
-            quoted_bind_names = self.compiled.escaped_bind_names
+            preParamValue = None
             for bindparam in self.compiled.binds.values():
                 if bindparam.isoutparam:
                     name = self.compiled.bind_names[bindparam]
                     type_impl = bindparam.type.dialect_impl(self.dialect)
 
-                    if hasattr(type_impl, "_cx_oracle_var"):
-                        self.out_parameters[name] = type_impl._cx_oracle_var(
-                            self.dialect, self.cursor
+                    dbtype = type_impl.get_dbapi_type(self.dialect.dbapi)
+
+                    yaspyApi = self.dialect.dbapi
+
+                    if dbtype is None:
+                        raise exc.InvalidRequestError(
+                            "Cannot create out parameter for "
+                            "parameter "
+                            "%r - its type %r is not supported by"
+                            " yaspy" % (bindparam.key, bindparam.type)
+                        )
+
+                    if compat.py2k and dbtype in (
+                        yaspyApi.CLOB,
+                        yaspyApi.NCLOB,
+                    ):
+                        outconverter = (
+                            processors.to_unicode_processor_factory(
+                                self.dialect.encoding,
+                                errors=self.dialect.encoding_errors,
+                            )
+                        )
+                        self.out_parameters[name] = self.cursor.var(
+                            dbtype,
+                            outconverter=lambda value: outconverter(
+                                value.read()
+                            ),
+                        )
+                    # elif dbtype in (
+                    #     yaspyApi.BLOB,
+                    #     yaspyApi.CLOB,
+                    #     yaspyApi.NCLOB,
+                    # ):
+                    #     self.out_parameters[name] = self.cursor.var(
+                    #         dbtype, outconverter=lambda value: value.read()
+                    #     )
+                    elif compat.py2k and isinstance(
+                        type_impl, sqltypes.Unicode
+                    ):
+                        outconverter = (
+                            processors.to_unicode_processor_factory(
+                                self.dialect.encoding,
+                                errors=self.dialect.encoding_errors,
+                            )
+                        )
+                        self.out_parameters[name] = self.cursor.var(
+                            dbtype, outconverter=outconverter
                         )
                     else:
-                        dbtype = type_impl.get_dbapi_type(self.dialect.dbapi)
+                        self.out_parameters[name] = self.cursor.var(dbtype)
 
-                        cx_Oracle = self.dialect.dbapi
-
-                        if dbtype is None:
-                            raise exc.InvalidRequestError(
-                                "Cannot create out parameter for "
-                                "parameter "
-                                "%r - its type %r is not supported by"
-                                " cx_oracle" % (bindparam.key, bindparam.type)
-                            )
-
-                        if compat.py2k and dbtype in (
-                            cx_Oracle.CLOB,
-                            cx_Oracle.NCLOB,
-                        ):
-                            outconverter = (
-                                processors.to_unicode_processor_factory(
-                                    self.dialect.encoding,
-                                    errors=self.dialect.encoding_errors,
-                                )
-                            )
-                            self.out_parameters[name] = self.cursor.var(
-                                dbtype,
-                                outconverter=lambda value: outconverter(
-                                    value.read()
-                                ),
-                            )
-                        # elif dbtype in (
-                        #     cx_Oracle.BLOB,
-                        #     cx_Oracle.CLOB,
-                        #     cx_Oracle.NCLOB,
-                        # ):
-                        #     self.out_parameters[name] = self.cursor.var(
-                        #         dbtype, outconverter=lambda value: value.read()
-                        #     )
-                        elif compat.py2k and isinstance(
-                            type_impl, sqltypes.Unicode
-                        ):
-                            outconverter = (
-                                processors.to_unicode_processor_factory(
-                                    self.dialect.encoding,
-                                    errors=self.dialect.encoding_errors,
-                                )
-                            )
-                            self.out_parameters[name] = self.cursor.var(
-                                dbtype, outconverter=outconverter
-                            )
-                        else:
-                            self.out_parameters[name] = self.cursor.var(dbtype)
-                    # self.parameters[0][
-                    #     quoted_bind_names.get(name, name)
-                    # ] = self.out_parameters[name]
                     self.parameters[0][paramIndex] = self.out_parameters[name]
-                paramIndex += 1
+                if preParamValue is None or preParamValue != bindparam :
+                    paramIndex += 1
+                preParamValue = bindparam
 
     def _get_cx_oracle_type_handler(self, impl):
         if hasattr(impl, "_cx_oracle_outputtypehandler"):
