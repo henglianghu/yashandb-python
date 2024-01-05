@@ -410,8 +410,6 @@ class YasDialect_yaspy(YasDialect):
 
     execute_sequence_format = list
 
-    _cx_oracle_threaded = None
-
     @util.deprecated_params(
         threaded=(
             "1.3",
@@ -437,8 +435,6 @@ class YasDialect_yaspy(YasDialect):
         YasDialect.__init__(self, **kwargs)
         self.arraysize = arraysize
         self.encoding_errors = encoding_errors
-        if threaded is not None:
-            self._cx_oracle_threaded = threaded
         self.auto_convert_lobs = auto_convert_lobs
         self.coerce_to_unicode = coerce_to_unicode
         self.coerce_to_decimal = coerce_to_decimal
@@ -746,31 +742,10 @@ class YasDialect_yaspy(YasDialect):
 
         return output_type_handler
 
-    # yashdb yaspy dialtet has no  output_type_handler
-    # def on_connect(self):
-
-    #     output_type_handler = self._generate_connection_outputtype_handler()
-
-    #     def on_connect(conn):
-    #         conn.outputtypehandler = output_type_handler
-
-    #     return on_connect
-
     def create_connect_args(self, url):
         opts = dict(url.query)
 
-        for opt in ("use_ansi", "auto_convert_lobs"):
-            if opt in opts:
-                util.warn_deprecated(
-                    "cx_oracle dialect option %r should only be passed to "
-                    "create_engine directly, not within the URL string" % opt,
-                    version="1.3",
-                )
-                util.coerce_kw_type(opts, opt, bool)
-                setattr(self, opt, opts.pop(opt))
-
         database = url.database
-        service_name = opts.pop("service_name", None)
         port = url.port
         if port:
             port = int(port)
@@ -785,10 +760,7 @@ class YasDialect_yaspy(YasDialect):
         if url.username is not None:
             opts["user"] = url.username
 
-        if self._cx_oracle_threaded is not None:
-            opts.setdefault("threaded", self._cx_oracle_threaded)
-
-        def convert_cx_oracle_constant(value):
+        def convert_yaspy_constant(value):
             if isinstance(value, util.string_types):
                 try:
                     int_val = int(value)
@@ -800,10 +772,10 @@ class YasDialect_yaspy(YasDialect):
             else:
                 return value
 
-        util.coerce_kw_type(opts, "mode", convert_cx_oracle_constant)
+        util.coerce_kw_type(opts, "mode", convert_yaspy_constant)
         util.coerce_kw_type(opts, "threaded", bool)
         util.coerce_kw_type(opts, "events", bool)
-        util.coerce_kw_type(opts, "purity", convert_cx_oracle_constant)
+        util.coerce_kw_type(opts, "purity", convert_yaspy_constant)
         return ([], opts)
 
     def _get_server_version_info(self, connection):
