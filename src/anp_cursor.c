@@ -190,7 +190,7 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
 }
 
 static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numElements, unsigned arrayPos,
-    PyObject* value, AnpVar* oldVar, AnpVar** newVar, int deferTypeAssignment)
+    PyObject* value, AnpVar* oldVar, AnpVar** newVar)
 {
     AnpVar* varToSet;
     *newVar = NULL;
@@ -219,14 +219,8 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             varToSet = *newVar;
         }
 
-        if (varToSet && anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
-            if (arrayPos > 0) {
-                return YAPI_ERROR;
-            }
-
-            PyErr_Clear();
-            Py_CLEAR(*newVar);
-            oldVar = NULL;
+        if (anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
+            return YAPI_ERROR;
         }
 
         return YAPI_SUCCESS;
@@ -235,11 +229,12 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
     if (isValueVar) {
         Py_INCREF(value);
         *newVar = (AnpVar*)value;
-    } else if (value != Py_None || !deferTypeAssignment) {
+    } else {
         *newVar = anpVarNewByValue(cursor, value, numElements, true);
         if (*newVar == NULL) {
             return YAPI_ERROR;
         }
+
         if (anpVarSetValue(cursor->connection->hConn, *newVar, arrayPos, value) < 0) {
             Py_CLEAR(*newVar);
             return YAPI_ERROR;
@@ -249,8 +244,7 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
     return YAPI_SUCCESS;
 }
 
-YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
-                                int deferTypeAssignment)
+YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
     Py_ssize_t temp = PySequence_Size(parameters);
     if (temp < 0) {
@@ -291,8 +285,7 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
             origVar = NULL;
         }
 
-        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, paramValue, (AnpVar*)origVar, &newVar,
-                                           deferTypeAssignment) < 0) {
+        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, paramValue, (AnpVar*)origVar, &newVar) < 0) {
             return YAPI_ERROR;
         }
         if (newVar != NULL) {
@@ -313,8 +306,7 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
     return YAPI_SUCCESS;
 }
 
-YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
-                                 int deferTypeAssignment)
+YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
 #if 0
     if (cursor->bindVariables) {
@@ -353,13 +345,12 @@ YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsig
     return 0;
 }
 
-YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, uint32_t numElements, unsigned arrayPos,
-                                    int deferTypeAssignment)
+YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, uint32_t numElements, unsigned arrayPos)
 {
     if (PySequence_Check(parameters)) {
-        return anpCursorSetBindByPos(cursor, parameters, numElements, arrayPos, deferTypeAssignment);
+        return anpCursorSetBindByPos(cursor, parameters, numElements, arrayPos);
     } else {
-        return anpCursorSetBindByName(cursor, parameters, numElements, arrayPos, deferTypeAssignment);
+        return anpCursorSetBindByName(cursor, parameters, numElements, arrayPos);
     }
 }
 
@@ -672,7 +663,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
-    if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0, 0) < 0) {
+    if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
         return NULL;
     }
 
@@ -874,7 +865,7 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
             return anpRaiseExceptionFromString(anpInterfaceErrorException, "expecting a list of dictionaries or sequences");
         }
         
-        if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i, (i < paramRowCnt - 1)) < 0) {
+        if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i) < 0) {
             return NULL;
         }
     }
