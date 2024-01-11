@@ -30,6 +30,10 @@ from sqlalchemy.types import NCHAR
 from sqlalchemy.types import NVARCHAR
 from sqlalchemy.types import TIMESTAMP
 from sqlalchemy.types import VARCHAR
+from sqlalchemy.types import BOOLEAN
+from sqlalchemy.types import SMALLINT
+from sqlalchemy.types import BIGINT
+from sqlalchemy.types import TIME
 from sqlalchemy.util import compat
 
 RESERVED_WORDS = set(
@@ -179,7 +183,8 @@ class ROWID(sqltypes.TypeEngine):
     """
 
     __visit_name__ = "ROWID"
-
+class TINYINT(sqltypes.TypeEngine):
+    __visit_name__ = "TINYINT"
 
 class _YasBoolean(sqltypes.Boolean):
     def get_dbapi_type(self, dbapi):
@@ -215,6 +220,12 @@ ischema_names = {
     "BINARY_DOUBLE": BINARY_DOUBLE,
     "BINARY_FLOAT": BINARY_FLOAT,
     "ROWID": ROWID,
+    "BOOLEAN": BOOLEAN,
+    "SMALLINT":	 SMALLINT,
+    "TINYINT": TINYINT,
+    "BIGINT": BIGINT,
+    "DOUBLE": BINARY_DOUBLE,
+    "TIME":  TIME,
 }
 
 
@@ -934,8 +945,6 @@ class YasDialect(default.DefaultDialect):
     preparer = YasIdentifierPreparer
     execution_ctx_cls = YasExecutionContext
 
-    reflection_options = ("oracle_resolve_synonyms",)
-
     _use_nchar_for_unicode = False
 
     construct_arguments = [
@@ -1020,7 +1029,7 @@ class YasDialect(default.DefaultDialect):
 
     @property
     def _supports_table_compress_for(self):
-        return self.server_version_info and self.server_version_info >= (11,)
+        return False
 
     @property
     def _supports_char_length(self):

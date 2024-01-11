@@ -143,7 +143,7 @@ def _oracle_follower_url_from_main(url, ident):
     return url.set(username=ident, password="xe")
 
 
-@temp_table_keyword_args.for_db("oracle")
+@temp_table_keyword_args.for_db("yashandb")
 def _oracle_temp_table_keyword_args(cfg, eng):
     return {
         "prefixes": ["GLOBAL TEMPORARY"],
