@@ -206,10 +206,22 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             return YAPI_SUCCESS;
         }
 
-        varToSet = oldVar;
-        if (numElements > oldVar->elements) {
-            anpAdjustVarTypeSize(value, &oldVar->size, &oldVar->dbType);
+        uint32_t bindCostSize;
+        YapiType bindType;
+        bool needCreateVar = false;
+        anpAdjustVarTypeSize(value, &bindCostSize, &bindType);
+        if (bindCostSize > CONVERT_TO_LOB_SIZE) {
+            if (oldVar->elements > 1) {
+                (void)anpRaiseExceptionFromString(anpNotSupportedException, "batch execute mix lob bind");
+                return YAPI_ERROR;
+            }
+            needCreateVar = true;
+        }
 
+        varToSet = oldVar;
+        if ((numElements > oldVar->elements) || needCreateVar) {
+            oldVar->size = bindCostSize;
+            oldVar->dbType = bindType;
             VarAssist assist = { .isArray = oldVar->isArray, .numElements = numElements,
                 .size = oldVar->size, .type = oldVar->dbType, .bindIn = true};
             *newVar = anpNewVar(cursor, &assist);
@@ -600,6 +612,28 @@ static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* key
     return (PyObject*)var;
 }
 
+static void resetBindAnpVars(AnpCursor* cursor)
+{
+    if (cursor->bindVariables == NULL) {
+        return;
+    }
+
+    bool isList = PyList_Check(cursor->bindVariables);
+    if (!isList) {
+        return;
+    }
+
+    uint32_t bindVarsCnt = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
+    for (uint32_t i = 0; i < bindVarsCnt; i++) {
+        PyObject* origVar = PyList_GET_ITEM(cursor->bindVariables, i);
+        if (origVar == Py_None) {
+            continue;
+        }
+
+        ((AnpVar*)origVar)->dataOffset = 0;
+    }
+}
+
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
     PyObject *statement, *execArgs;
@@ -663,6 +697,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
+    resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
         return NULL;
     }
@@ -857,6 +892,7 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
         return anpRaiseAndReturnNullException();
     }
 
+    resetBindAnpVars(cursor);
     PyObject *rowParameter;
     uint32_t paramRowCnt = (uint32_t) PyList_GET_SIZE(execArgs);
     for (uint32_t i = 0; i < paramRowCnt; i++) {
