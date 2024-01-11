@@ -23,15 +23,6 @@ from sqlalchemy.sql import expression
 from sqlalchemy.util import compat
 
 
-_ORACLE_BIND_TRANSLATE_RE = re.compile(r"[%\(\):\[\]\.\/\? ]")
-
-# Oracle bind names can't start with digits or underscores.
-# currently we rely upon Oracle-specific quoting of bind names in most cases.
-# however for expanding params, the escape chars are used.
-# see #8708
-_ORACLE_BIND_TRANSLATE_CHARS = dict(zip("%():[]./? ", "PAZCCCCCCCC"))
-
-
 class _YasInteger(sqltypes.Integer):
     def get_dbapi_type(self, dbapi):
         return dbapi.INTEGER
@@ -61,64 +52,6 @@ class _YasNumeric(sqltypes.Numeric):
 
     def result_processor(self, dialect, coltype):
         return None
-
-    def _cx_oracle_outputtypehandler(self, dialect):
-        cx_Oracle = dialect.dbapi
-
-        is_cx_oracle_6 = dialect._is_cx_oracle_6
-
-        def handler(cursor, name, default_type, size, precision, scale):
-            outconverter = None
-
-            if precision:
-                if self.asdecimal:
-                    if default_type == cx_Oracle.NATIVE_FLOAT:
-                        # receiving float and doing Decimal after the fact
-                        # allows for float("inf") to be handled
-                        type_ = default_type
-                        outconverter = decimal.Decimal
-                    elif is_cx_oracle_6:
-                        type_ = decimal.Decimal
-                    else:
-                        type_ = cx_Oracle.STRING
-                        outconverter = dialect._to_decimal
-                else:
-                    if self.is_number and scale == 0:
-                        # integer. cx_Oracle is observed to handle the widest
-                        # variety of ints when no directives are passed,
-                        # from 5.2 to 7.0.  See [ticket:4457]
-                        return None
-                    else:
-                        type_ = cx_Oracle.NATIVE_FLOAT
-
-            else:
-                if self.asdecimal:
-                    if default_type == cx_Oracle.NATIVE_FLOAT:
-                        type_ = default_type
-                        outconverter = decimal.Decimal
-                    elif is_cx_oracle_6:
-                        type_ = decimal.Decimal
-                    else:
-                        type_ = cx_Oracle.STRING
-                        outconverter = dialect._to_decimal
-                else:
-                    if self.is_number and scale == 0:
-                        # integer. cx_Oracle is observed to handle the widest
-                        # variety of ints when no directives are passed,
-                        # from 5.2 to 7.0.  See [ticket:4457]
-                        return None
-                    else:
-                        type_ = cx_Oracle.NATIVE_FLOAT
-
-            return cursor.var(
-                type_,
-                255,
-                arraysize=cursor.arraysize,
-                outconverter=outconverter,
-            )
-
-        return handler
-
 
 class _YasBinaryFloat(_YasNumeric):
     def get_dbapi_type(self, dbapi):
@@ -237,7 +170,7 @@ class _YasRowid(yashandb.ROWID):
 
 class YasCompiler_yaspy(YasCompiler):
     # yaspy has not this attr
-    _oracle_cx_sql_compiler = True
+    _yaspy_sql_compiler = True
 
 
 class YasExecutionContext_yaspy(YasExecutionContext):
@@ -308,14 +241,8 @@ class YasExecutionContext_yaspy(YasExecutionContext):
                     paramIndex += 1
                 preParamValue = bindparam
 
-    def _get_cx_oracle_type_handler(self, impl):
-        if hasattr(impl, "_cx_oracle_outputtypehandler"):
-            return impl._cx_oracle_outputtypehandler(self.dialect)
-        else:
-            return None
-
     def pre_exec(self):
-        if not getattr(self.compiled, "_oracle_cx_sql_compiler", False):
+        if not getattr(self.compiled, "_yaspy_sql_compiler", False):
             return
 
         self.out_parameters = {}
@@ -413,11 +340,11 @@ class YasDialect_yaspy(YasDialect):
     @util.deprecated_params(
         threaded=(
             "1.3",
-            "The 'threaded' parameter to the cx_oracle dialect "
+            "The 'threaded' parameter to the yaspy dialect "
             "is deprecated as a dialect-level argument, and will be removed "
             "in a future release.  As of version 1.3, it defaults to False "
             "rather than True.  The 'threaded' option can be passed to "
-            "cx_Oracle directly in the URL query string passed to "
+            "yaspy directly in the URL query string passed to "
             ":func:`_sa.create_engine`.",
         )
     )
@@ -443,51 +370,27 @@ class YasDialect_yaspy(YasDialect):
             self.colspecs[sqltypes.Unicode] = _YasUnicodeStringNCHAR
             self.colspecs[sqltypes.UnicodeText] = _YasUnicodeTextNCLOB
 
-        cx_Oracle = self.dbapi
+        yaspyDbapi = self.dbapi
 
-        if cx_Oracle is None:
+        if yaspyDbapi is None:
             self._include_setinputsizes = {}
-            self.cx_oracle_ver = (0, 0, 0)
         else:
-            #self.cx_oracle_ver = self._parse_cx_oracle_ver(cx_Oracle.version)
-            self.cx_oracle_ver = (8, 1, 0)
-            #if self.cx_oracle_ver < (5, 2) and self.cx_oracle_ver > (0, 0, 0):
-            #    raise exc.InvalidRequestError(
-            #        "cx_Oracle version 5.2 and above are supported"
-            #    )
-
             self._include_setinputsizes = {
-                # cx_Oracle.DATETIME,
-                # cx_Oracle.NCLOB,
-                # cx_Oracle.CLOB,
-                # cx_Oracle.LOB,
-                # cx_Oracle.NCHAR,
-                # cx_Oracle.FIXED_NCHAR,
-                # cx_Oracle.BLOB,
-                # cx_Oracle.FIXED_CHAR,
-                # cx_Oracle.TIMESTAMP,
+                # yaspyDbapi.DATETIME,
+                # yaspyDbapi.NCLOB,
+                # yaspyDbapi.CLOB,
+                # yaspyDbapi.LOB,
+                # yaspyDbapi.NCHAR,
+                # yaspyDbapi.FIXED_NCHAR,
+                # yaspyDbapi.BLOB,
+                # yaspyDbapi.FIXED_CHAR,
+                # yaspyDbapi.TIMESTAMP,
                 _YasInteger,
                 _YasBINARY_FLOAT,
                 _YasBINARY_DOUBLE,
             }
 
             self._paramval = lambda value: value.getvalue()
-
-            # https://github.com/oracle/python-cx_Oracle/issues/176#issuecomment-386821291
-            # https://github.com/oracle/python-cx_Oracle/issues/224
-            # self._values_are_lists = self.cx_oracle_ver >= (6, 3)
-            # if self._values_are_lists:
-            #     #cx_Oracle.__future__.dml_ret_array_val = True
-
-            #     def _returningval(value):
-            #         try:
-            #             return value.values[0][0]
-            #         except IndexError:
-            #             return None
-
-            #     self._returningval = _returningval
-            # else:
-            #     self._returningval = self._paramval
 
             # adapt for yashan, temporarily only suppport single value for out parameter
             def _returningval(value):
@@ -498,22 +401,7 @@ class YasDialect_yaspy(YasDialect):
 
             self._returningval = _returningval
 
-        self._is_cx_oracle_6 = self.cx_oracle_ver >= (6,)
-
-    @property
-    def _cursor_var_unicode_kwargs(self):
-        if self.encoding_errors:
-            if self.cx_oracle_ver >= (6, 4):
-                return {"encodingErrors": self.encoding_errors}
-            else:
-                util.warn(
-                    "cx_oracle version %r does not support encodingErrors"
-                    % (self.cx_oracle_ver,)
-                )
-
-        return {}
-
-    def _parse_cx_oracle_ver(self, version):
+    def _parse_yaspy_ver(self, version):
         m = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", version)
         if m:
             return tuple(int(x) for x in m.group(1, 2, 3) if x is not None)
@@ -528,9 +416,6 @@ class YasDialect_yaspy(YasDialect):
 
     def initialize(self, connection):
         super(YasDialect_yaspy, self).initialize(connection)
-        if self._is_oracle_8:
-            self.supports_unicode_binds = False
-
         #yashandb has error if call _detect_decimal_char
         #self._detect_decimal_char(connection)
 
@@ -593,13 +478,6 @@ class YasDialect_yaspy(YasDialect):
         dbapi_connection = connection.connection
 
         with dbapi_connection.cursor() as cursor:
-            # issue #8744
-            # nls_session_parameters is not available in some Oracle
-            # modes like "mount mode".  But then, v$nls_parameters is not
-            # available if the connection doesn't have SYSDBA priv.
-            #
-            # simplify the whole thing and just use the method that we were
-            # doing in the test suite already, selecting a number
 
             def output_type_handler(
                 cursor, name, defaultType, size, precision, scale
@@ -635,112 +513,6 @@ class YasDialect_yaspy(YasDialect):
             return int(value)
 
     _to_decimal = decimal.Decimal
-
-    def _generate_connection_outputtype_handler(self):
-        """establish the default outputtypehandler established at the
-        connection level.
-
-        """
-
-        dialect = self
-        cx_Oracle = dialect.dbapi
-
-        number_handler = _YasNUMBER(
-            asdecimal=True
-        )._cx_oracle_outputtypehandler(dialect)
-        float_handler = _YasNUMBER(
-            asdecimal=False
-        )._cx_oracle_outputtypehandler(dialect)
-
-        def output_type_handler(
-            cursor, name, default_type, size, precision, scale
-        ):
-
-            if (
-                default_type == cx_Oracle.NUMBER
-                and default_type is not cx_Oracle.NATIVE_FLOAT
-            ):
-                if not dialect.coerce_to_decimal:
-                    return None
-                elif precision == 0 and scale in (0, -127):
-                    # ambiguous type, this occurs when selecting
-                    # numbers from deep subqueries
-                    return cursor.var(
-                        cx_Oracle.STRING,
-                        255,
-                        outconverter=dialect._detect_decimal,
-                        arraysize=cursor.arraysize,
-                    )
-                elif precision and scale > 0:
-                    return number_handler(
-                        cursor, name, default_type, size, precision, scale
-                    )
-                else:
-                    return float_handler(
-                        cursor, name, default_type, size, precision, scale
-                    )
-
-            # allow all strings to come back natively as Unicode
-            elif (
-                dialect.coerce_to_unicode
-                and default_type
-                in (
-                    cx_Oracle.STRING,
-                    cx_Oracle.FIXED_CHAR,
-                )
-                and default_type is not cx_Oracle.CLOB
-                and default_type is not cx_Oracle.NCLOB
-            ):
-                if compat.py2k:
-                    outconverter = processors.to_unicode_processor_factory(
-                        dialect.encoding, errors=dialect.encoding_errors
-                    )
-                    return cursor.var(
-                        cx_Oracle.STRING,
-                        size,
-                        cursor.arraysize,
-                        outconverter=outconverter,
-                    )
-                else:
-                    return cursor.var(
-                        util.text_type,
-                        size,
-                        cursor.arraysize,
-                        **dialect._cursor_var_unicode_kwargs
-                    )
-
-            elif dialect.auto_convert_lobs and default_type in (
-                cx_Oracle.CLOB,
-                cx_Oracle.NCLOB,
-            ):
-                if compat.py2k:
-                    outconverter = processors.to_unicode_processor_factory(
-                        dialect.encoding, errors=dialect.encoding_errors
-                    )
-                    return cursor.var(
-                        cx_Oracle.LONG_STRING,
-                        size,
-                        cursor.arraysize,
-                        outconverter=outconverter,
-                    )
-                else:
-                    return cursor.var(
-                        cx_Oracle.LONG_STRING,
-                        size,
-                        cursor.arraysize,
-                        **dialect._cursor_var_unicode_kwargs
-                    )
-
-            elif dialect.auto_convert_lobs and default_type in (
-                cx_Oracle.BLOB,
-            ):
-                return cursor.var(
-                    cx_Oracle.LONG_BINARY,
-                    size,
-                    cursor.arraysize,
-                )
-
-        return output_type_handler
 
     def create_connect_args(self, url):
         opts = dict(url.query)
@@ -798,20 +570,11 @@ class YasDialect_yaspy(YasDialect):
             1033,
             2396,
         }:
-            # ORA-00028: your session has been killed
-            # ORA-03114: not connected to ORACLE
-            # ORA-03113: end-of-file on communication channel
-            # ORA-03135: connection lost contact
-            # ORA-01033: ORACLE initialization or shutdown in progress
-            # ORA-02396: exceeded maximum idle time, please connect again
-            # TODO: Others ?
             return True
 
         if re.match(r"^(?:DPI-1010|DPI-1080|DPY-1001|DPY-4011)", str(e)):
             # DPI-1010: not connected
             # DPI-1080: connection was closed by ORA-3113
-            # python-oracledb's DPY-1001: not connected to database
-            # python-oracledb's DPY-4011: the database or network closed the
             # connection
             # TODO: others?
             return True
@@ -836,11 +599,11 @@ class YasDialect_yaspy(YasDialect):
 
     def do_begin_twophase(self, connection, xid):
         connection.connection.begin(*xid)
-        connection.connection.info["cx_oracle_xid"] = xid
+        connection.connection.info["yaspy_xid"] = xid
 
     def do_prepare_twophase(self, connection, xid):
         result = connection.connection.prepare()
-        connection.info["cx_oracle_prepared"] = result
+        connection.info["yaspy_prepared"] = result
 
     def do_rollback_twophase(
         self, connection, xid, is_prepared=True, recover=False
@@ -857,10 +620,10 @@ class YasDialect_yaspy(YasDialect):
         else:
             if recover:
                 raise NotImplementedError(
-                    "2pc recovery not implemented for cx_Oracle"
+                    "2pc recovery not implemented for yaspy"
                 )
-            oci_prepared = connection.info["cx_oracle_prepared"]
-            if oci_prepared:
+            yac_prepared = connection.info["yaspy_prepared"]
+            if yac_prepared:
                 self.do_commit(connection.connection)
         # TODO: need to end XA state here
 
@@ -879,7 +642,6 @@ class YasDialect_yaspy(YasDialect):
             )
 
             if not self.supports_unicode_binds:
-                # oracle 8 only
                 collection = (
                     (self.dialect._encoder(key)[0], dbtype)
                     for key, dbtype in collection
@@ -889,7 +651,7 @@ class YasDialect_yaspy(YasDialect):
 
     def do_recover_twophase(self, connection):
         raise NotImplementedError(
-            "recover two phase query for cx_Oracle not implemented"
+            "recover two phase query for yaspy not implemented"
         )
 
 
