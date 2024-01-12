@@ -2,6 +2,7 @@
 #include "structmember.h"
 #include "anp_exception.h"
 #include "anp_var.h"
+#include "anp_api_type.h"
 
 
 static int anpCursorInit(AnpCursor* cursor, PyObject* arguments, PyObject* keywordArgs)
@@ -189,16 +190,15 @@ static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
 }
 
 static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned numElements, unsigned arrayPos,
-    PyObject* value, AnpVar* oldVar, AnpVar** newVar, int deferTypeAssignment)
+    PyObject* value, AnpVar* oldVar, AnpVar** newVar)
 {
     AnpVar* varToSet;
-    int     isValueVar;
-
     *newVar = NULL;
-    isValueVar = anpCheckVar(value);
+
+    bool isValueVar = anpCheckVar(value);
 
     if (oldVar != NULL) {
-        if (isValueVar != 0) {
+        if (isValueVar) {
             if ((PyObject*)oldVar != value) {
                 Py_INCREF(value);
                 *newVar = (AnpVar*)value;
@@ -206,51 +206,61 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             return YAPI_SUCCESS;
         }
 
-        varToSet = oldVar;
-        if (numElements >= oldVar->elements) {
-            anpAdjustVarTypeSize(value, &oldVar->size, &oldVar->dbType);
+        uint32_t bindCostSize;
+        YapiType bindType;
+        bool needCreateVar = false;
+        anpAdjustVarTypeSize(value, &bindCostSize, &bindType);
+        if (bindCostSize > CONVERT_TO_LOB_SIZE) {
+            if (oldVar->elements > 1) {
+                (void)anpRaiseExceptionFromString(anpNotSupportedException, "batch execute mix lob bind");
+                return YAPI_ERROR;
+            }
+            needCreateVar = true;
+        }
 
+        if ((numElements == 1) && (bindType != oldVar->dbType)) {
+            needCreateVar = true;
+        }
+
+        varToSet = oldVar;
+        if ((numElements > oldVar->elements) || needCreateVar) {
+            oldVar->size = bindCostSize;
+            oldVar->dbType = bindType;
             VarAssist assist = { .isArray = oldVar->isArray, .numElements = numElements,
-                .size = oldVar->size, .type = oldVar->dbType};
-            *newVar = anpNewVar(cursor, &assist, true);
+                .size = oldVar->size, .type = oldVar->dbType, .bindIn = true};
+            *newVar = anpNewVar(cursor, &assist);
             if (!*newVar) {
                 return YAPI_ERROR;
             }
             varToSet = *newVar;
         }
 
-        if (varToSet && anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
-            if (arrayPos > 0) {
-                return YAPI_ERROR;
-            }
-
-            PyErr_Clear();
-            Py_CLEAR(*newVar);
-            oldVar = NULL;
+        if (anpVarSetValue(cursor->connection->hConn, varToSet, arrayPos, value) < 0) {
+            return YAPI_ERROR;
         }
+
+        return YAPI_SUCCESS;
     }
 
-    if (oldVar == NULL) {
-        if (isValueVar != 0) {
-            Py_INCREF(value);
-            *newVar = (AnpVar*)value;
-        } else if (value != Py_None || !deferTypeAssignment) {
-            *newVar = anpVarNewByValue(cursor, value, numElements, true);
-            if (*newVar == NULL) {
-                return YAPI_ERROR;
-            }
-            if (anpVarSetValue(cursor->connection->hConn, *newVar, arrayPos, value) < 0) {
-                Py_CLEAR(*newVar);
-                return YAPI_ERROR;
-            }
+    if (isValueVar) {
+        Py_INCREF(value);
+        *newVar = (AnpVar*)value;
+    } else {
+        *newVar = anpVarNewByValue(cursor, value, numElements, true);
+        if (*newVar == NULL) {
+            return YAPI_ERROR;
+        }
+
+        if (anpVarSetValue(cursor->connection->hConn, *newVar, arrayPos, value) < 0) {
+            Py_CLEAR(*newVar);
+            return YAPI_ERROR;
         }
     }
 
     return YAPI_SUCCESS;
 }
 
-YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
-                                int deferTypeAssignment)
+YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
     Py_ssize_t temp = PySequence_Size(parameters);
     if (temp < 0) {
@@ -273,8 +283,8 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
             return YAPI_ERROR;
         }
     }
-    AnpVar* newVar;
 
+    AnpVar* newVar = NULL;
     for (uint32_t i = 0; i < numParams; i++) {
         PyObject* origVar;
         PyObject* paramValue = PySequence_GetItem(parameters, i);
@@ -291,11 +301,10 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
             origVar = NULL;
         }
 
-        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, paramValue, (AnpVar*)origVar, &newVar,
-                                           deferTypeAssignment) < 0) {
+        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, paramValue, (AnpVar*)origVar, &newVar) < 0) {
             return YAPI_ERROR;
         }
-        if (newVar) {
+        if (newVar != NULL) {
             if (i < (uint32_t)PyList_GET_SIZE(cursor->bindVariables)) {
                 if (PyList_SetItem(cursor->bindVariables, i, (PyObject*)newVar) < 0) {
                     Py_DECREF(newVar);
@@ -313,8 +322,7 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
     return YAPI_SUCCESS;
 }
 
-YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos,
-                                 int deferTypeAssignment)
+YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
 #if 0
     if (cursor->bindVariables) {
@@ -353,13 +361,12 @@ YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsig
     return 0;
 }
 
-YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, uint32_t numElements, unsigned arrayPos,
-                                    int deferTypeAssignment)
+YapiResult anpCursorSetBindVariables(AnpCursor* cursor, PyObject* parameters, uint32_t numElements, unsigned arrayPos)
 {
     if (PySequence_Check(parameters)) {
-        return anpCursorSetBindByPos(cursor, parameters, numElements, arrayPos, deferTypeAssignment);
+        return anpCursorSetBindByPos(cursor, parameters, numElements, arrayPos);
     } else {
-        return anpCursorSetBindByName(cursor, parameters, numElements, arrayPos, deferTypeAssignment);
+        return anpCursorSetBindByName(cursor, parameters, numElements, arrayPos);
     }
 }
 
@@ -502,8 +509,8 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
         anpGetColumnSize(&queryInfo, &size, maxCharsetRatio);
 
         VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type, 
-            .size = size, .isArray = false};
-        AnpVar* var = anpNewVar(cursor, &assist, false);
+            .size = size, .isArray = false, .bindIn = false};
+        AnpVar* var = anpNewVar(cursor, &assist);
         if (var == NULL) {
             return -1;
         }
@@ -543,6 +550,92 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
         }
     }
     return 0;
+}
+
+int yaspyGetDbTypeFromPyType(PyObject *type, YapiType *dbType) 
+{
+    int status = PyObject_IsInstance(type, (PyObject*)&yasPyTypeApiType);
+    if (status < 0) {
+        return -1;
+    }
+
+    if (status == 1) {
+        yaspyApiType *apiType = (yaspyApiType*)type;
+        *dbType = apiType->defaultDbType;
+        return 0;
+    }
+
+    PyErr_SetString(PyExc_TypeError, "expecting dbapi type");
+    return -1;
+}
+
+static int getDefaultTypeSize(YapiType type)
+{
+    int typeSize = 0;
+    switch (type)
+    {
+        case YAPI_TYPE_TINYINT:
+        case YAPI_TYPE_SMALLINT:
+        case YAPI_TYPE_INTEGER:
+        case YAPI_TYPE_BIGINT:
+            typeSize = 8;
+            break;
+        default:
+            typeSize = 20;
+            break;
+    }
+
+    return typeSize;
+}
+
+// create an anpVar for binding out parameter
+static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
+{
+    //add a arg for input/output ?
+    static char *keywordList[] = { "typ", "size", "arraysize"};
+    PyObject *type;
+
+    int size = 0;
+    int arraySize = 1;
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "O|ii", keywordList, &type, &size, &arraySize)) {
+        return NULL;
+    }
+
+    YapiType dbType = YAPI_TYPE_UNKNOWN;
+    if (yaspyGetDbTypeFromPyType(type, &dbType) < 0) {
+        return NULL;
+    }
+
+    if (size == 0) {
+        size = getDefaultTypeSize(dbType);
+    }
+    VarAssist assist = {.numElements = arraySize, .type = dbType, .size = size, .isArray = false, .bindIn = false};
+    AnpVar *var = anpNewVar(cursor, &assist);
+    var->bindDir = YAPI_PARAM_OUTPUT;
+
+    return (PyObject*)var;
+}
+
+static void resetBindAnpVars(AnpCursor* cursor)
+{
+    if (cursor->bindVariables == NULL) {
+        return;
+    }
+
+    bool isList = PyList_Check(cursor->bindVariables);
+    if (!isList) {
+        return;
+    }
+
+    uint32_t bindVarsCnt = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
+    for (uint32_t i = 0; i < bindVarsCnt; i++) {
+        PyObject* origVar = PyList_GET_ITEM(cursor->bindVariables, i);
+        if ((origVar == NULL) || (origVar == Py_None)) {
+            continue;
+        }
+
+        ((AnpVar*)origVar)->dataOffset = 0;
+    }
 }
 
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
@@ -608,7 +701,8 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return anpRaiseAndReturnNullException();
     }
 
-    if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0, 0) < 0) {
+    resetBindAnpVars(cursor);
+    if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
         return NULL;
     }
 
@@ -735,9 +829,125 @@ static PyObject* anpCursorCallProc(AnpCursor* cursor, PyObject* args)
     return anpRaiseExceptionFromString(anpNotSupportedException, "callproc() not implement");
 }
 
-static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args)
+static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr)
 {
-    return anpRaiseExceptionFromString(anpNotSupportedException, "executemany() not implement");
+    if (sqlStr == cursor->statment && !cursor->isFail) {
+        sqlStr = cursor->statment;
+        return 0;
+    }
+
+    Py_CLEAR(cursor->statment);
+    Py_XINCREF(sqlStr);
+    cursor->statment = sqlStr;
+    Py_CLEAR(cursor->fetchVariables);
+    Py_CLEAR(cursor->bindVariables);
+
+    int status;
+    char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(sqlStr));
+    Py_BEGIN_ALLOW_THREADS
+        if (cursor->hStmt != NULL) {
+            yapiReleaseStmt(cursor->hStmt);
+            cursor->hStmt = NULL;
+        }
+        status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
+    Py_END_ALLOW_THREADS
+    if (status != YAPI_SUCCESS) {
+        cursor->isFail = 1;
+        return anpRaiseAndReturnIntException();
+    }
+
+    int32_t len;
+    if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnIntException();
+    }
+
+    return 0;
+}
+
+static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
+{
+    PyObject *sqlStr;
+    PyObject *execArgs;
+    int batchErrorsEnabled = 0;
+    int arrayDMLRowCountsEnabled = 0;
+    static char *keywordList[] = { "statement", "parameters", "batcherrors",
+            "arraydmlrowcounts", NULL };
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "OO|ii", keywordList, 
+    &sqlStr, &execArgs, &batchErrorsEnabled, &arrayDMLRowCountsEnabled)) {
+        PyErr_SetString(PyExc_TypeError, "parameters should be a list of sequences/dictionaries "
+                "or an integer specifying the number of times to execute "
+                "the statement");
+        return NULL;
+    }
+
+    if (!anpCursorIsOpen(cursor)) {
+        return NULL;
+    }
+
+    int16_t  numQueryColumns;
+    int       status;
+
+    // do prepare, todo: extract a func() for both here and the execute()'s code
+    if (anpInternalPrepare(cursor, sqlStr) < 0) {
+        return NULL;
+    }
+
+    if (yapiNumResultCols(cursor->hStmt, &numQueryColumns) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnNullException();
+    }
+
+    resetBindAnpVars(cursor);
+    PyObject *rowParameter;
+    uint32_t paramRowCnt = (uint32_t) PyList_GET_SIZE(execArgs);
+    for (uint32_t i = 0; i < paramRowCnt; i++) {
+        rowParameter = PyList_GET_ITEM(execArgs, i);
+        if (!PyDict_Check(rowParameter) && !PySequence_Check(rowParameter)) {
+            return anpRaiseExceptionFromString(anpInterfaceErrorException, "expecting a list of dictionaries or sequences");
+        }
+        
+        if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i) < 0) {
+            return NULL;
+        }
+    }
+
+    if (yapiSetStmtAttr(cursor->hStmt, YAPI_ATTR_PARAMSET_SIZE, &paramRowCnt, sizeof(uint32_t)) != YAPI_SUCCESS) {
+        return NULL;
+    }
+
+    if (anpCursorPerformBind(cursor) != YAPI_SUCCESS) {
+        return NULL;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+        status = yapiExecute(cursor->hStmt);
+    Py_END_ALLOW_THREADS
+    if (status != YAPI_SUCCESS) {
+        cursor->isFail = 1;
+        return anpRaiseAndReturnNullException();
+    }
+
+    cursor->isFail = 0;
+    if (anpTryReleaseLobLoc(cursor) < 0)
+    {
+        return anpRaiseAndReturnNullException();
+    }
+
+    if (numQueryColumns == 0) {
+        if (cursor->sqlType >= YAPI_SQLTYPE_CREATE_DATABASE) {
+            cursor->rowCount = 0;
+            Py_RETURN_NONE;
+        }
+        int32_t len;
+        if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_ROWS_AFFECTED, &cursor->rowCount, sizeof(uint64_t), &len)
+            != YAPI_SUCCESS) {
+            return anpRaiseAndReturnNullException();
+        }
+        Py_RETURN_NONE;
+    } else {
+        cursor->rowCount = 0;
+    }
+
+    Py_RETURN_NONE;
 }
 
 static PyObject* anpCursorFetch(AnpCursor* cursor, uint32_t fetchRows)
@@ -870,6 +1080,31 @@ static void anpCursorFree(AnpCursor* cursor)
     Py_TYPE(cursor)->tp_free((PyObject*)cursor);
 }
 
+static PyObject *yaspyCursor_contextManagerEnter(AnpCursor *cursor,
+        PyObject* args)
+{
+    Py_INCREF(cursor);
+    return (PyObject*) cursor;
+}
+
+static PyObject *yaspyCursor_contextManagerExit(AnpCursor *cursor,
+        PyObject* args)
+{
+    PyObject *excType, *excValue, *excTraceback, *result;
+    if (!PyArg_ParseTuple(args, "OOO", &excType, &excValue, &excTraceback)) {
+        return NULL;
+    }
+
+    result = anpCursorClose(cursor, NULL);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    Py_DECREF(result);
+    Py_INCREF(Py_False);
+    return Py_False;
+}
+
 static PyMethodDef anpMethods[] = {
         {"callproc",     (PyCFunction) anpCursorCallProc,    METH_VARARGS  | METH_KEYWORDS },
         {"close",        (PyCFunction) anpCursorClose,       METH_NOARGS},
@@ -881,7 +1116,9 @@ static PyMethodDef anpMethods[] = {
         {"nextset",      (PyCFunction) anpCursorNextSet,     METH_NOARGS},
         {"setinputsizes", (PyCFunction) anpCursorSetInputSizes, METH_VARARGS | METH_KEYWORDS },
         {"setoutputsize", (PyCFunction) anpCursorSetOutputSize, METH_VARARGS },
-
+        {"var",          (PyCFunction)yaspyCursorVar, METH_VARARGS | METH_KEYWORDS},
+        { "__enter__",   (PyCFunction) yaspyCursor_contextManagerEnter, METH_NOARGS },
+        { "__exit__",    (PyCFunction) yaspyCursor_contextManagerExit, METH_VARARGS },
         {NULL, NULL}
 };
 

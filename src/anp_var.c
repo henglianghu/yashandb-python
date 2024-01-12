@@ -25,7 +25,12 @@ static void anpVarFree(AnpVar *var)
 
 static PyObject * anpVarRepr(AnpVar *var)
 {
-    return NULL;
+    // temp support
+    if (var == NULL) {
+        return NULL;
+    }
+
+    return PyUnicode_FromFormat("<yaspy.Var type %d value>", var->dbType);
 }
 
 static PyObject * anpVarGetType(AnpVar *var, void *unused)
@@ -33,8 +38,27 @@ static PyObject * anpVarGetType(AnpVar *var, void *unused)
     return PyLong_FromLong(var->dbType);
 }
 
+static PyObject* yaspyVarGetValues(AnpVar *var, void *unused)
+{
+    // temporarily only return one value
+    PyObject *values = PyList_New(1);
+    if (values == NULL) {
+        return NULL;
+    }
+
+    PyObject *singleValue = anpVarGetSingleValue(var->connection->hConn, var, 0);
+    if (singleValue == NULL) {
+        Py_DECREF(values);
+        return NULL;
+    }
+    PyList_SET_ITEM(values, 0, singleValue);
+
+    return values;
+}
+
 static PyGetSetDef anpCalcMembers[] = {
     { "type",           (getter)anpVarGetType,                   0, 0, 0 },
+    { "values",         (getter)yaspyVarGetValues,               0, 0, 0 },
     { NULL }
 };
 
@@ -91,7 +115,7 @@ bool anpVarIsLobType(AnpVar* var) {
     return false;
 }
 
-AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
+AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
 {
     AnpVar* var = (AnpVar*) anchorPyTypeVar.tp_alloc(&anchorPyTypeVar, 0);
     if (var == NULL) {
@@ -100,9 +124,21 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
 
     Py_INCREF(cursor->connection);
     var->connection = cursor->connection;
+    var->bindDir = 0;
+    if (assist->bindIn) {
+        var->bindDir = YAPI_PARAM_INPUT;
+    }
 
     YapiType type = assist->type;
     Py_ssize_t size = assist->size;
+
+    // for executemany, char/varchar allocated size is max
+    if ((assist->numElements > 1) && assist->bindIn && (size <= CONVERT_TO_LOB_SIZE)) {
+        if (((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) || (type == YAPI_TYPE_BINARY)) {
+            size = (Py_ssize_t) CONVERT_TO_LOB_SIZE;
+        }
+    }
+    var->dataOffset = 0;
 
     var->size = (uint32_t)size;
     var->elements = (uint32_t)assist->numElements;
@@ -116,7 +152,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindIn)
         var->transType = type;
     }
 
-    if (bindIn && (size > CONVERT_TO_LOB_SIZE)) {
+    if (assist->bindIn && (size > CONVERT_TO_LOB_SIZE)) {
         if ((type >= YAPI_TYPE_CHAR) && (type <= YAPI_TYPE_NVARCHAR)) {
             var->transType = YAPI_TYPE_CLOB;
             var->dbType = YAPI_TYPE_CLOB;
@@ -326,17 +362,43 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     }
 
     if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB) {
-        if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
+        if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
         }
         return 0;
     }
 
-    if (yapiBindParameter(cursor->hStmt, pos, YAPI_PARAM_INPUT, var->dbType, var->data, var->size, var->bufferSize, var->indicator) !=
+    uint32_t bindSize = var->size;
+    if ((var->elements > 1) && (var->dataOffset > 0)) {
+        bindSize = -2;
+    }
+
+    if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, var->data, bindSize, var->bufferSize, var->indicator) !=
         YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
+    return 0;
+}
+
+int adjustAnpVarBuffSize(AnpVar* var, uint32_t elementSize)
+{
+    if (var->size >= elementSize) {
+        return 0;
+    }
+
+    size_t relocSize = (size_t)elementSize*var->elements;
+    if (relocSize < var->bufferSize*2) {
+        relocSize = (size_t)(var->bufferSize*2);
+    }
+
+    var->data = PyMem_Realloc(var->data, relocSize);
+    if (var->data == NULL) {
+        return -1;
+    }
+
+    var->bufferSize = relocSize;
+    var->size = elementSize;
     return 0;
 }
 
@@ -355,8 +417,18 @@ static int anpVarSetDecimal(AnpVar* var, uint32_t arrayPos, PyObject* value)
         return -1;
     }
 
-    strcpy(var->data + var->size*arrayPos, bindStr);
+    uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+    if (costSize > var->size) {
+        if (adjustAnpVarBuffSize(var, costSize) < 0) {
+            return -1;
+        }
+    }
+
+    strcpy(var->data + var->dataOffset, bindStr);
     var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+    var->dataOffset += costSize;
+    var->data[var->dataOffset - 1] = '\0';
+
     Py_DECREF(strValue);
     return 0;
 }
@@ -410,8 +482,17 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
              }
              return 0;
         } else {
-            strcpy(var->data + var->size*arrayPos, bindStr);
+            uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+            if (costSize > var->size) {
+                if (adjustAnpVarBuffSize(var, costSize) < 0) {
+                    return -1;
+                }
+            }
+
+            strcpy(var->data + var->dataOffset, bindStr);
             var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += costSize;
+            var->data[var->dataOffset - 1] = '\0';
         }
         return 0;
     }
@@ -432,8 +513,16 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
             return 0;   
         }
 
-        strcpy(var->data + var->size*arrayPos, PyBytes_AS_STRING(value));
-        var->indicator[arrayPos] = (int)byteSize;
+        uint32_t costSize = (uint32_t)byteSize;
+        if (costSize > var->size) {
+            if (adjustAnpVarBuffSize(var, costSize) < 0) {
+                return -1;
+            }
+        }
+
+        strcpy(var->data + var->dataOffset, PyBytes_AS_STRING(value));
+        var->indicator[arrayPos] = (int32_t)costSize;
+        var->dataOffset += costSize;
         return 0;
     }
     
@@ -673,6 +762,6 @@ AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numEleme
     }
 
     VarAssist assist = {.isArray = isArray, .numElements = numElements,
-        .size = size, .type = type};
-    return anpNewVar(cursor, &assist, bindIn);
+        .size = size, .type = type, .bindIn = bindIn};
+    return anpNewVar(cursor, &assist);
 }

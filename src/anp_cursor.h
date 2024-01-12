@@ -9,6 +9,7 @@ typedef struct StAnpCursor {
     PyObject_HEAD
     YapiStmt* hStmt;
     AnpConnection *connection;
+    // list of AnpVar's as bind parameters
     PyObject *bindVariables;
     PyObject* fetchVariables;
     PyObject* statment;

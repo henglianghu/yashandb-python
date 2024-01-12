@@ -8,16 +8,19 @@
 typedef struct StAnpVar {
     PyObject_HEAD
     AnpConnection* connection;
-
-    uint32_t elements;  // the number of allocated elements
+    // for bind execute, it is the bind row count
+    uint32_t elements;
     uint32_t size;      // the size of single element
     uint32_t bufferSize;
     bool   isArray;
     bool   isValueSet;
     int32_t* indicator;  // an array to  specify whether the var is NULL
+    // bind value's offset, for var type
+    uint32_t dataOffset;
     char*  data;
     YapiType   dbType;
     YapiType   transType;
+    YapiParamDirection bindDir;
 } AnpVar;
 
 typedef struct StVarAssist
@@ -26,13 +29,14 @@ typedef struct StVarAssist
     Py_ssize_t size;
     YapiType type;
     bool isArray;
+    bool bindIn;
 } VarAssist;
 
 YapiResult anpRegisteVarObject(PyObject* module);
 YapiResult anpInitDecimal();
 
 bool   anpCheckVar(PyObject* object);
-AnpVar*   anpNewVar(AnpCursor* cursor, VarAssist *assist, bool bindVar);
+AnpVar*   anpNewVar(AnpCursor* cursor, VarAssist *assist);
 int       anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos);
 PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos);
 

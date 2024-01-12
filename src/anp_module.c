@@ -10,6 +10,48 @@ extern PyTypeObject *anpPyTypeDateTime;
 
 YapiEnv* anpEnv = NULL;
 
+yaspyApiType *yaspyApiTypeInteger = NULL;
+
+
+#define YASPY_MAKE_TYPE_READY(type) \
+    if (PyType_Ready(type) < 0) \
+        return NULL;
+
+
+#define YASPY_ADD_TYPE_OBJECT(name, type) \
+    Py_INCREF(type); \
+    if (PyModule_AddObject(module, name, (PyObject*) type) < 0) \
+        return NULL;
+
+
+static int yaspyModuleAddApiType(PyObject *module, const char *name, YapiType defaultDbType, yaspyApiType **apiType)
+{
+    yaspyApiType *tempApiType;
+
+    tempApiType = (yaspyApiType*) yasPyTypeApiType.tp_alloc(&yasPyTypeApiType, 0);
+    if (tempApiType == NULL) {
+        return -1;
+    }
+
+    tempApiType->name = name;
+    tempApiType->defaultDbType = defaultDbType;
+    tempApiType->dbTypes = PyList_New(0);
+    if (tempApiType->dbTypes == NULL) {
+        Py_DECREF(tempApiType);
+        return -1;
+    }
+
+    if (PyModule_AddObject(module, name, (PyObject*) tempApiType) < 0) {
+        Py_DECREF(tempApiType);
+        return -1;
+    }
+    *apiType = tempApiType;
+
+    return 0;
+}
+
+
+
 static PyMethodDef AnchorMethods[] = {
     { NULL }
 };
@@ -36,13 +78,16 @@ PyInit_yaspy(void)
         return NULL;
     }
 
+    YASPY_MAKE_TYPE_READY(&yasPyTypeApiType);
+
     module = PyModule_Create(&yaspy_module);
-    Py_INCREF(anpPyTypeDate);
-    if (PyModule_AddObject(module, "Date", (PyObject*) anpPyTypeDate) < 0) {
-        return NULL;
-    }
-    Py_INCREF(anpPyTypeDateTime);
-    if (PyModule_AddObject(module, "Timestamp", (PyObject*) anpPyTypeDateTime) < 0) {
+
+    YASPY_ADD_TYPE_OBJECT("Date", anpPyTypeDate);
+    YASPY_ADD_TYPE_OBJECT("Timestamp", anpPyTypeDateTime);
+
+    YASPY_ADD_TYPE_OBJECT("ApiType", &yasPyTypeApiType);
+
+    if (yaspyModuleAddApiType(module, "INTEGER", YAPI_TYPE_INTEGER, &yaspyApiTypeInteger) < 0) {
         return NULL;
     }
 
