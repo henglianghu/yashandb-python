@@ -57,7 +57,7 @@ class RAW(sqltypes._Binary):
     __visit_name__ = "RAW"
 
 
-OracleRaw = RAW
+YasRaw = RAW
 
 
 class NCLOB(sqltypes.Text):
@@ -84,8 +84,6 @@ class NUMBER(sqltypes.Numeric, sqltypes.Integer):
 
     def adapt(self, impltype):
         ret = super(NUMBER, self).adapt(impltype)
-        # leave a hint for the DBAPI handler
-        ret._is_oracle_number = True
         return ret
 
     @property
@@ -117,15 +115,6 @@ class LONG(sqltypes.Text):
 
 
 class DATE(sqltypes.DateTime):
-    """Provide the oracle DATE type.
-
-    This type has no special Python behavior, except that it subclasses
-    :class:`_types.DateTime`; this is to suit the fact that the Oracle
-    ``DATE`` type supports a time value.
-
-    .. versionadded:: 0.9.4
-
-    """
 
     __visit_name__ = "DATE"
 
@@ -176,13 +165,9 @@ class INTERVAL(sqltypes.NativeForEmulated, sqltypes._AbstractInterval):
 
 
 class ROWID(sqltypes.TypeEngine):
-    """Oracle ROWID type.
-
-    When used in a cast() or similar, generates ROWID.
-
-    """
 
     __visit_name__ = "ROWID"
+
 class TINYINT(sqltypes.TypeEngine):
     __visit_name__ = "TINYINT"
 
@@ -230,10 +215,6 @@ ischema_names = {
 
 
 class YasTypeCompiler(compiler.GenericTypeCompiler):
-    # Note:
-    # Oracle DATE == DATETIME
-    # Oracle does not allow milliseconds in DATE
-    # Oracle does not support TIME columns
 
     def visit_datetime(self, type_, **kw):
         return self.visit_DATE(type_, **kw)
@@ -355,10 +336,6 @@ class YasTypeCompiler(compiler.GenericTypeCompiler):
 
 
 class YasCompiler(compiler.SQLCompiler):
-    """Oracle compiler modifies the lexical structure of Select
-    statements to work under non-ANSI configured Oracle databases, if
-    the use_ansi flag is False.
-    """
 
     compound_keywords = util.update_copy(
         compiler.SQLCompiler.compound_keywords,
@@ -421,8 +398,6 @@ class YasCompiler(compiler.SQLCompiler):
     def default_from(self):
         """Called when a ``SELECT`` statement has no froms,
         and no ``FROM`` clause is to be appended.
-
-        The Oracle compiler tacks a "FROM DUAL" to the statement.
         """
 
         return " FROM DUAL"
@@ -452,7 +427,6 @@ class YasCompiler(compiler.SQLCompiler):
 
         def visit_join(join):
             if join.isouter:
-                # https://docs.oracle.com/database/121/SQLRF/queries006.htm#SQLRF52354
                 # "apply the outer join operator (+) to all columns of B in
                 # the join condition in the WHERE clause" - that is,
                 # unconditionally regardless of operator or the other side
@@ -496,7 +470,6 @@ class YasCompiler(compiler.SQLCompiler):
         return self.preparer.format_sequence(seq) + ".nextval"
 
     def get_render_as_alias_suffix(self, alias_name_text):
-        """Oracle doesn't like ``FROM table AS alias``"""
 
         return " " + alias_name_text
 
@@ -507,21 +480,6 @@ class YasCompiler(compiler.SQLCompiler):
         for i, column in enumerate(
             expression._select_iterables(returning_cols)
         ):
-            if (
-                self.isupdate
-                and isinstance(column, sa_schema.Column)
-                and isinstance(column.server_default, Computed)
-                and not self.dialect._supports_update_returning_computed_cols
-            ):
-                util.warn(
-                    "Computed columns don't work with Oracle UPDATE "
-                    "statements that use RETURNING; the value of the column "
-                    "*before* the UPDATE takes place is returned.   It is "
-                    "advised to not use RETURNING with an Oracle computed "
-                    "column.  Consider setting implicit_returning to False on "
-                    "the Table object in order to avoid implicit RETURNING "
-                    "clauses from being generated for this Table."
-                )
             if column.type._has_column_expression:
                 col_expr = column.type.column_expression(column)
             else:
@@ -534,7 +492,7 @@ class YasCompiler(compiler.SQLCompiler):
             )
 
             # ensure the ExecutionContext.get_out_parameters() method is
-            # *not* called; the cx_Oracle dialect wants to handle these
+            # *not* called; the dialect wants to handle these
             # parameters separately
             self.has_out_parameters = False
 
@@ -556,7 +514,7 @@ class YasCompiler(compiler.SQLCompiler):
     def translate_select_structure(self, select_stmt, **kwargs):
         select = select_stmt
 
-        if not getattr(select, "_oracle_visit", None):
+        if not getattr(select, "_yashandb_visit", None):
             if not self.dialect.use_ansi:
                 froms = self._display_froms_for_select(
                     select, kwargs.get("asfrom", False)
@@ -564,7 +522,7 @@ class YasCompiler(compiler.SQLCompiler):
                 whereclause = self._get_nonansi_join_whereclause(froms)
                 if whereclause is not None:
                     select = select.where(whereclause)
-                    select._oracle_visit = True
+                    select._yashandb_visit = True
 
             # if fetch is used this is not needed
             if (
@@ -580,13 +538,9 @@ class YasCompiler(compiler.SQLCompiler):
                 if select._simple_int_clause(offset_clause):
                     offset_clause = offset_clause.render_literal_execute()
 
-                # currently using form at:
-                # https://blogs.oracle.com/oraclemagazine/\
-                # on-rownum-and-limiting-results
-
                 orig_select = select
                 select = select._generate()
-                select._oracle_visit = True
+                select._yashandb_visit = True
 
                 # add expressions to accommodate FOR UPDATE OF
                 for_update = select._for_update_arg
@@ -621,7 +575,7 @@ class YasCompiler(compiler.SQLCompiler):
                         )
                     )
 
-                limitselect._oracle_visit = True
+                limitselect._yashandb_visit = True
                 limitselect._is_wrapper = True
 
                 # add expressions to accommodate FOR UPDATE OF
@@ -660,7 +614,7 @@ class YasCompiler(compiler.SQLCompiler):
                     limitselect = limitselect.add_columns(
                         sql.literal_column("ROWNUM").label("ora_rn")
                     )
-                    limitselect._oracle_visit = True
+                    limitselect._yashandb_visit = True
                     limitselect._is_wrapper = True
 
                     if for_update is not None and for_update.of:
@@ -683,7 +637,7 @@ class YasCompiler(compiler.SQLCompiler):
                         ]
                     )
 
-                    offsetselect._oracle_visit = True
+                    offsetselect._yashandb_visit = True
                     offsetselect._is_wrapper = True
 
                     if for_update is not None and for_update.of:
@@ -778,12 +732,9 @@ class YasDDLCompiler(compiler.DDLCompiler):
         if constraint.ondelete is not None:
             text += " ON DELETE %s" % constraint.ondelete
 
-        # oracle has no ON UPDATE CASCADE -
-        # its only available via triggers
-        # https://asktom.oracle.com/tkyte/update_cascade/index.html
         if constraint.onupdate is not None:
             util.warn(
-                "Oracle does not contain native UPDATE CASCADE "
+                "YashanDB does not contain native UPDATE CASCADE "
                 "functionality - onupdates will not be rendered for foreign "
                 "keys.  Consider using deferrable=True, initially='deferred' "
                 "or triggers."
@@ -857,8 +808,8 @@ class YasDDLCompiler(compiler.DDLCompiler):
         )
         if generated.persisted is True:
             raise exc.CompileError(
-                "Oracle computed columns do not support 'stored' persistence; "
-                "set the 'persisted' flag to None or False for Oracle support."
+                "YashanDB computed columns do not support 'stored' persistence; "
+                "set the 'persisted' flag to None or False for YashanDB support."
             )
         elif generated.persisted is False:
             text += " VIRTUAL"
@@ -958,7 +909,7 @@ class YasDialect(default.DefaultDialect):
     @util.deprecated_params(
         use_binds_for_limits=(
             "1.4",
-            "The ``use_binds_for_limits`` Oracle dialect parameter is "
+            "The ``use_binds_for_limits`` YashanDB dialect parameter is "
             "deprecated. The dialect now renders LIMIT /OFFSET integers "
             "inline in all cases using a post-compilation hook, so that the "
             "value is still represented by a 'bound parameter' on the Core "
@@ -988,19 +939,12 @@ class YasDialect(default.DefaultDialect):
         super(YasDialect, self).initialize(connection)
 
         self.implicit_returning = self.__dict__.get(
-            "implicit_returning", self.server_version_info > (10,)
+            "implicit_returning", True
         )
 
-        if self._is_oracle_8:
-            self.colspecs = self.colspecs.copy()
-            self.colspecs.pop(sqltypes.Interval)
-            self.use_ansi = False
-
-        self.supports_identity_columns = self.server_version_info >= (12,)
+        self.supports_identity_columns = True
 
     def _get_effective_compat_server_version_info(self, connection):
-        # dialect does not need compat levels below 12.2, so don't query
-        # in those cases
 
         if self.server_version_info < (12, 2):
             return self.server_version_info
@@ -1020,12 +964,8 @@ class YasDialect(default.DefaultDialect):
             return self.server_version_info
 
     @property
-    def _is_oracle_8(self):
-        return self.server_version_info and self.server_version_info < (9,)
-
-    @property
     def _supports_table_compression(self):
-        return self.server_version_info and self.server_version_info >= (10, 1)
+        return True
 
     @property
     def _supports_table_compress_for(self):
@@ -1033,16 +973,14 @@ class YasDialect(default.DefaultDialect):
 
     @property
     def _supports_char_length(self):
-        return not self._is_oracle_8
+        return True
 
     @property
     def _supports_update_returning_computed_cols(self):
-        # on version 18 this error is no longet present while it happens on 11
-        # it may work also on versions before the 18
-        return self.server_version_info and self.server_version_info >= (18,)
+        return True
 
     def do_release_savepoint(self, connection, name):
-        # Oracle does not support RELEASE SAVEPOINT
+        # YashanDB does not support RELEASE SAVEPOINT
         pass
 
     def _check_max_identifier_length(self, connection):
@@ -1069,7 +1007,7 @@ class YasDialect(default.DefaultDialect):
     _isolation_lookup = ["READ COMMITTED", "SERIALIZABLE"]
 
     def get_isolation_level(self, connection):
-        raise NotImplementedError("implemented by cx_Oracle dialect")
+        raise NotImplementedError("implemented by yaspy dialect")
 
     def get_default_isolation_level(self, dbapi_conn):
         try:
@@ -1080,7 +1018,7 @@ class YasDialect(default.DefaultDialect):
             return "READ COMMITTED"
 
     def set_isolation_level(self, connection, level):
-        raise NotImplementedError("implemented by cx_Oracle dialect")
+        raise NotImplementedError("implemented by yaspy dialect")
 
     def has_table(self, connection, table_name, schema=None):
         self._ensure_has_table_connection(connection)
@@ -1214,11 +1152,6 @@ class YasDialect(default.DefaultDialect):
             actual_name = self.denormalize_name(table_name)
 
         if dblink:
-            # using user_db_links here since all_db_links appears
-            # to have more restricted permissions.
-            # https://docs.oracle.com/cd/B28359_01/server.111/b28310/ds_admin005.htm
-            # will need to hear from more users if we are doing
-            # the right thing here.  See [ticket:2619]
             owner = connection.scalar(
                 sql.text(
                     "SELECT username FROM user_db_links " "WHERE db_link=:link"
@@ -1303,68 +1236,12 @@ class YasDialect(default.DefaultDialect):
     @reflection.cache
     def get_table_options(self, connection, table_name, schema=None, **kw):
         options = {}
-
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
-        dblink = kw.get("dblink", "")
-        info_cache = kw.get("info_cache")
-
-        (table_name, schema, dblink, synonym) = self._prepare_reflection_args(
-            connection,
-            table_name,
-            schema,
-            resolve_synonyms,
-            dblink,
-            info_cache=info_cache,
-        )
-
-        params = {"table_name": table_name}
-
-        columns = ["table_name"]
-        if self._supports_table_compression:
-            columns.append("compression")
-        if self._supports_table_compress_for:
-            columns.append("compress_for")
-
-        text = (
-            "SELECT %(columns)s "
-            "FROM ALL_TABLES%(dblink)s "
-            "WHERE table_name = CAST(:table_name AS VARCHAR(128))"
-        )
-
-        if schema is not None:
-            params["owner"] = schema
-            text += " AND owner = CAST(:owner AS VARCHAR(128)) "
-        text = text % {"dblink": dblink, "columns": ", ".join(columns)}
-
-        result = connection.execute(sql.text(text), params)
-
-        enabled = dict(DISABLED=False, ENABLED=True)
-
-        row = result.first()
-        if row:
-            if "compression" in row._fields and enabled.get(
-                row.compression, False
-            ):
-                if "compress_for" in row._fields:
-                    options["oracle_compress"] = row.compress_for
-                else:
-                    options["oracle_compress"] = True
-
         return options
 
     @reflection.cache
     def get_columns(self, connection, table_name, schema=None, **kw):
-        """
 
-        kw arguments can be:
-
-            oracle_resolve_synonyms
-
-            dblink
-
-        """
-
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
+        resolve_synonyms = kw.get("yashandb_resolve_synonyms", False)
         dblink = kw.get("dblink", "")
         info_cache = kw.get("info_cache")
 
@@ -1612,17 +1489,12 @@ class YasDialect(default.DefaultDialect):
         uniqueness = dict(NONUNIQUE=False, UNIQUE=True)
         enabled = dict(DISABLED=False, ENABLED=True)
 
-        oracle_sys_col = re.compile(r"SYS_NC\d+\$", re.IGNORECASE)
+        yashandb_sys_col = re.compile(r"SYS_NC\d+\$", re.IGNORECASE)
 
         index = None
         for rset in rp:
             index_name_normalized = self.normalize_name(rset.index_name)
 
-            # skip primary key index.  This is refined as of
-            # [ticket:5421].  Note that ALL_INDEXES.GENERATED will by "Y"
-            # if the name of this index was generated by Oracle, however
-            # if a named primary key constraint was created then this flag
-            # is false.
             if (
                 pk_constraint
                 and index_name_normalized == pk_constraint["name"]
@@ -1645,9 +1517,7 @@ class YasDialect(default.DefaultDialect):
                     "yashandb_compress"
                 ] = rset.prefix_length
 
-            # filter out Oracle SYS_NC names.  could also do an outer join
-            # to the all_tab_columns table and check for real col names there.
-            if not oracle_sys_col.match(rset.column_name):
+            if not yashandb_sys_col.match(rset.column_name):
                 index["column_names"].append(
                     self.normalize_name(rset.column_name)
                 )
@@ -1701,7 +1571,7 @@ class YasDialect(default.DefaultDialect):
 
     @reflection.cache
     def get_pk_constraint(self, connection, table_name, schema=None, **kw):
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
+        resolve_synonyms = kw.get("yashandb_resolve_synonyms", False)
         dblink = kw.get("dblink", "")
         info_cache = kw.get("info_cache")
 
@@ -1740,17 +1610,9 @@ class YasDialect(default.DefaultDialect):
 
     @reflection.cache
     def get_foreign_keys(self, connection, table_name, schema=None, **kw):
-        """
 
-        kw arguments can be:
-
-            oracle_resolve_synonyms
-
-            dblink
-
-        """
         requested_schema = schema  # to check later on
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
+        resolve_synonyms = kw.get("yashandb_resolve_synonyms", False)
         dblink = kw.get("dblink", "")
         info_cache = kw.get("info_cache")
 
@@ -1853,7 +1715,7 @@ class YasDialect(default.DefaultDialect):
     def get_unique_constraints(
         self, connection, table_name, schema=None, **kw
     ):
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
+        resolve_synonyms = kw.get("yashandb_resolve_synonyms", False)
         dblink = kw.get("dblink", "")
         info_cache = kw.get("info_cache")
 
@@ -1935,7 +1797,7 @@ class YasDialect(default.DefaultDialect):
     def get_check_constraints(
         self, connection, table_name, schema=None, include_all=False, **kw
     ):
-        resolve_synonyms = kw.get("oracle_resolve_synonyms", False)
+        resolve_synonyms = kw.get("yashandb_resolve_synonyms", False)
         dblink = kw.get("dblink", "")
         info_cache = kw.get("info_cache")
 
