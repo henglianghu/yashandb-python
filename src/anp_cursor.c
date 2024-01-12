@@ -218,6 +218,10 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             needCreateVar = true;
         }
 
+        if ((numElements == 1) && (bindType != oldVar->dbType)) {
+            needCreateVar = true;
+        }
+
         varToSet = oldVar;
         if ((numElements > oldVar->elements) || needCreateVar) {
             oldVar->size = bindCostSize;
