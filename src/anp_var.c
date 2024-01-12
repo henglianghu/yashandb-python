@@ -381,6 +381,27 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
     return 0;
 }
 
+int adjustAnpVarBuffSize(AnpVar* var, uint32_t elementSize)
+{
+    if (var->size >= elementSize) {
+        return 0;
+    }
+
+    size_t relocSize = (size_t)elementSize*var->elements;
+    if (relocSize < var->bufferSize*2) {
+        relocSize = (size_t)(var->bufferSize*2);
+    }
+
+    var->data = PyMem_Realloc(var->data, relocSize);
+    if (var->data == NULL) {
+        return -1;
+    }
+
+    var->bufferSize = relocSize;
+    var->size = elementSize;
+    return 0;
+}
+
 static int anpVarSetDecimal(AnpVar* var, uint32_t arrayPos, PyObject* value) 
 {
     PyObject *strValue = PyObject_Str(value);
@@ -396,8 +417,18 @@ static int anpVarSetDecimal(AnpVar* var, uint32_t arrayPos, PyObject* value)
         return -1;
     }
 
-    strcpy(var->data + var->size*arrayPos, bindStr);
+    uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+    if (costSize > var->size) {
+        if (adjustAnpVarBuffSize(var, costSize) < 0) {
+            return -1;
+        }
+    }
+
+    strcpy(var->data + var->dataOffset, bindStr);
     var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+    var->dataOffset += costSize;
+    var->data[var->dataOffset - 1] = '\0';
+
     Py_DECREF(strValue);
     return 0;
 }
@@ -417,27 +448,6 @@ static int anpVarSetPyDelta(AnpVar* var, uint32_t arrayPos, PyObject* value)
         return anpRaiseAndReturnIntException();
     }
     var->indicator[arrayPos] = (int32_t)sizeof(YapiDSInterval);
-    return 0;
-}
-
-int adjustAnpVarBuffSize(AnpVar* var, uint32_t elementSize)
-{
-    if (var->size >= elementSize) {
-        return 0;
-    }
-
-    size_t relocSize = (size_t)elementSize*var->elements;
-    if (relocSize < var->bufferSize*2) {
-        relocSize = (size_t)(var->bufferSize*2);
-    }
-
-    var->data = PyMem_Realloc(var->data, relocSize);
-    if (var->data == NULL) {
-        return -1;
-    }
-
-    var->bufferSize = relocSize;
-    var->size = elementSize;
     return 0;
 }
 
