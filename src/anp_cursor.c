@@ -630,7 +630,7 @@ static void resetBindAnpVars(AnpCursor* cursor)
     uint32_t bindVarsCnt = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
     for (uint32_t i = 0; i < bindVarsCnt; i++) {
         PyObject* origVar = PyList_GET_ITEM(cursor->bindVariables, i);
-        if (origVar == Py_None) {
+        if ((origVar == NULL) || (origVar == Py_None)) {
             continue;
         }
 
