@@ -922,7 +922,7 @@ class YasDialect(default.DefaultDialect):
         optimize_limits=False,
         use_binds_for_limits=None,
         use_nchar_for_unicode=False,
-        exclude_tablespaces=("SYSTEM", "SYSAUX"),
+        exclude_tablespaces=("SYSAUX",),
         **kwargs
     ):
         default.DefaultDialect.__init__(self, **kwargs)
