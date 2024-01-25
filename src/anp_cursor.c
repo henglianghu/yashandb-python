@@ -592,7 +592,7 @@ static int getDefaultTypeSize(YapiType type)
 static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
     //add a arg for input/output ?
-    static char *keywordList[] = { "typ", "size", "arraysize"};
+    static char *keywordList[] = { "typ", "size", "arraysize", NULL};
     PyObject *type;
 
     int size = 0;
