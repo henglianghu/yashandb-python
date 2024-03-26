@@ -35,7 +35,6 @@ from sqlalchemy.types import SMALLINT
 from sqlalchemy.types import BIGINT
 from sqlalchemy.types import TIME
 from sqlalchemy.util import compat
-from sqlalchemy.sql.elements import quoted_name
 
 RESERVED_WORDS = set(
     "SHARE RAW DROP BETWEEN FROM DESC OPTION PRIOR LONG THEN "
@@ -1007,14 +1006,6 @@ class YasDialect(default.DefaultDialect):
 
     _isolation_lookup = ["READ COMMITTED", "SERIALIZABLE"]
 
-    def normalize_name(self, name):
-        if name is None:
-            return None
-        if name.islower() or name.istitle():
-            return quoted_name(name, quote=True)
-        else:
-            return name
-
     def get_isolation_level(self, connection):
         raise NotImplementedError("implemented by yaspy dialect")
 
@@ -1502,8 +1493,6 @@ class YasDialect(default.DefaultDialect):
 
         index = None
         for rset in rp:
-            if rset is None or not hasattr(rset, "index_name"):
-                continue
             index_name_normalized = self.normalize_name(rset.index_name)
 
             if (
