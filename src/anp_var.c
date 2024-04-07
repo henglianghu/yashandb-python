@@ -5,10 +5,18 @@
 PyTypeObject *anpPyTypeDate;
 PyTypeObject *anpPyTypeDateTime;
 
+bool anpVarIsLobType(AnpVar* var) {
+    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB) {
+        return true;
+    }
+
+    return false;
+}
+
 static void anpVarFree(AnpVar *var)
 {
-    if(var->data) {
-        if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB) {
+    if (var->data) {
+        if (anpVarIsLobType(var)) {
             if (yapiLobDescFree(var->data, var->transType) != YAPI_SUCCESS) {
                 (void)anpRaiseAndReturnNullException();
             }
@@ -105,14 +113,6 @@ YapiResult anpRegisteVarObject(PyObject* module)
         return YAPI_ERROR;
     }
     return YAPI_SUCCESS;
-}
-
-bool anpVarIsLobType(AnpVar* var) {
-    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB) {
-        return true;
-    }
-
-    return false;
 }
 
 AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
