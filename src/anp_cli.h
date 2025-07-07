@@ -12,5 +12,7 @@ static inline uint32_t codSizeAlign4(uint32_t size)
 }
 
 #define CONVERT_TO_LOB_SIZE (32000)
+#define PROCEDURE_PARAM_LIST_BUFFER_SIZE (512)
+#define PROCEDURE_SQL_BUFFER_SIZE (1024)
 
 #endif  // ANCHOR_ANP_VAR_H

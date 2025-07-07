@@ -6,6 +6,17 @@ import yaspy
 import random
 import string
 
+def drop_table(cursor, name: str):
+    if not name:
+        return
+    cursor.execute(f"drop table if exists {name}")
+
+
+def read(cursor, name: str):
+    cursor.execute(f"select * from {name}")
+    for row in cursor:
+        print(row)
+
 class TestCase(test_base.TestBaseCase):
     def setUp(self):
         super().setUp()
@@ -151,6 +162,21 @@ class TestCase(test_base.TestBaseCase):
         row = self.cursor.fetchone()
         self.assertEqual(row, data)
 
+    def test_cursor_fetch_nchar(self):
+        self.cursor.execute("drop table if exists test_fetch_nchar")
+        self.cursor.execute(
+            "create table test_fetch_nchar(c1 nchar(5),c2 nchar(128),c3 nchar(1000),c4 nchar(2001),c5 nchar(4000),"
+            "c6 nchar(4000))"
+        )
+        self.cursor.execute(
+            "insert into test_fetch_nchar values (1,lpad('中',128,'国'),lpad('a',1000,'b'),lpad('🤭',"
+            "1000,'🤭'),lpad('1',4000,'1'),'あ')"
+        )
+        self.connection.commit()
+        self.cursor.execute("select * from test_fetch_nchar")
+        result = self.cursor.fetchone()
+        print(result)
+
     def test_bug_892(self):
         self.cursor.execute("select * from v$instance")
         row = self.cursor.fetchone()
@@ -276,6 +302,34 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(cursor.rowcount, 3)
         cursor.execute("drop table if exists tb_python_ydbrd_sit_30_2")
         self.assertEqual(cursor.rowcount, 0)
+
+    def test_proc(self):
+        name = "test_proc"
+        cursor = self.cursor
+        drop_table(cursor, name)
+        cursor.execute(
+            f"create table {name} (ID number, NAME varchar2(10), SEX varchar2(4), AGE number, ADDRESS varchar2(200))"
+        )
+        cursor.execute(
+            f"create or replace procedure proc1 is begin insert into {name}(ID, NAME, SEX, AGE) values (1, 'moses', 'man', 25); commit; end;"
+        )
+        cursor.callproc("proc1")
+
+        cursor.execute(
+            f"""create or replace procedure proc2(v_id number, v_name varchar2, v_sex varchar2, v_age number)
+                is begin insert into {name}(id, name, sex, age) values(v_id, v_name, v_sex, v_age);
+                commit; end;"""
+        )
+        cursor.callproc("proc2", [1, "aa", "man", 20])
+        self.connection.commit()
+        read(cursor, name)
+
+        # cursor.execute(
+        #     f"create or replace procedure proc3 (recount out number) is begin select count(*) into recount from {name}; commit; end;"
+        # )
+        # recount = cursor.var(int)
+        # cursor.callproc("proc3", [recount])
+        # print(recount.getvalue())
 
 if __name__ == "__main__":
     test_base.run_test_cases()

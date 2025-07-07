@@ -837,7 +837,66 @@ static PyObject* anpCursorFetchOne(AnpCursor* cursor, PyObject* args)
 
 static PyObject* anpCursorCallProc(AnpCursor* cursor, PyObject* args)
 {
-    return anpRaiseExceptionFromString(anpNotSupportedException, "callproc() not implement");
+    const char* procName;
+    PyObject*   params = NULL;
+
+    if (!PyArg_ParseTuple(args, "s|O", &procName, &params)) {
+        return NULL;
+    }
+
+    uint32_t paramCnt = 0;
+    if (params) {
+        if (!PySequence_Check(params)) {
+            return NULL;
+        }
+        paramCnt = PySequence_Size(params);
+    }
+
+    const char* sql_format = "begin %s(%s); end;";
+    char paramListStr[PROCEDURE_PARAM_LIST_BUFFER_SIZE] = "";
+    for (uint32_t i = 0; i < paramCnt; i++) {
+        if (i == 0) {
+            strcat(paramListStr, "?");
+            continue;
+        }
+        strcat(paramListStr, ",?");
+    }
+
+    char sql[PROCEDURE_SQL_BUFFER_SIZE] = "";
+    sprintf(sql, sql_format, procName, paramListStr);
+
+    PyObject* argsTuple = PyTuple_New(2);
+    if (!argsTuple) {
+        return anpRaiseAndReturnNullException();
+    }
+    PyTuple_SetItem(argsTuple, 0, PyUnicode_FromString(sql));
+    PyTuple_SetItem(argsTuple, 1, params);
+    if (!anpCursorExecute(cursor, argsTuple, NULL)) {
+        Py_DECREF(argsTuple);
+        return NULL;
+    }
+    Py_DECREF(argsTuple);
+
+    PyObject* result = PyList_New(0);
+    if (!result) {
+        return NULL;
+    }
+    if (!cursor->bindVariables) {
+        return result;
+    }
+    Py_ssize_t size = PyList_GET_SIZE(cursor->bindVariables);
+    AnpVar* bindVar = NULL;
+    PyObject* value = NULL;
+    for (uint32_t i = 0; i < size; i++) {
+        bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
+        value = anpVarGetSingleValue(bindVar->connection->hConn, bindVar, 0);
+        if (PyList_Append(result, value)) {
+            Py_DECREF(value);
+            return NULL;
+        }
+        Py_DECREF(value);
+    }
+    return result;
 }
 
 static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr)
