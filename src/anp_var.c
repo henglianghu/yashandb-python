@@ -313,13 +313,16 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
             break;
  
         case YAPI_TYPE_CHAR:
-        case YAPI_TYPE_NCHAR:
         case YAPI_TYPE_VARCHAR:
-        case YAPI_TYPE_NVARCHAR:
         case YAPI_TYPE_ROWID:
         case YAPI_TYPE_BIT:
         case YAPI_TYPE_YM_INTERVAL:
             result = PyUnicode_FromString(data);
+            break;
+
+        case YAPI_TYPE_NCHAR:
+        case YAPI_TYPE_NVARCHAR:
+            result = PyUnicode_Decode(data, (Py_ssize_t)var->indicator[pos], "utf-16", "strict");
             break;
 
         case YAPI_TYPE_DS_INTERVAL:
