@@ -356,15 +356,30 @@ PyObject* anpVarGetSingleValue(YapiConnect* hConn, AnpVar* var, uint32_t pos)
 
 int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
 {
+    const char *nameStr;
     if (name) {
-        anpRaiseExceptionFromString(anpNotSupportedException, "not support bind by name");
-        return -1;
+        if (!PyUnicode_Check(name)) {
+            anpRaiseExceptionFromString(anpInterfaceErrorException, "the name of bind paramter is not string");
+            return YAPI_ERROR;
+        }
+        nameStr = PyUnicode_AsUTF8(name);
+        if (nameStr == NULL) {
+            anpRaiseExceptionFromString(anpInterfaceErrorException, "the name of bind paramter should not null");
+            return YAPI_ERROR;
+        }
     }
 
     if (var->dbType == YAPI_TYPE_BLOB || var->dbType == YAPI_TYPE_CLOB) {
-        if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, &var->data, var->size, var->bufferSize, var->indicator) !=
-        YAPI_SUCCESS) {
-            return anpRaiseAndReturnIntException();
+        if (name) {
+            if (yapiBindParameterByName(cursor->hStmt, nameStr, var->bindDir, var->dbType, &var->data, var->size,
+                                        var->bufferSize, var->indicator) != YAPI_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
+        } else {
+            if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, &var->data, var->size, var->bufferSize,
+                                  var->indicator) != YAPI_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
         }
         return 0;
     }
@@ -374,9 +389,16 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
         bindSize = -2;
     }
 
-    if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, var->data, bindSize, var->bufferSize, var->indicator) !=
-        YAPI_SUCCESS) {
-        return anpRaiseAndReturnIntException();
+    if (name) {
+        if (yapiBindParameterByName(cursor->hStmt, nameStr, var->bindDir, var->dbType, var->data, bindSize,
+                                    var->bufferSize, var->indicator) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnIntException();
+        }
+    } else {
+        if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, var->data, bindSize, var->bufferSize,
+                              var->indicator) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnIntException();
+        }
     }
     return 0;
 }

@@ -324,17 +324,16 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
 
 YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
-#if 0
     if (cursor->bindVariables) {
-        YacUint32 origBoundByPos = PyList_Check(cursor->bindVariables);
+        uint32_t origBoundByPos = PyList_Check(cursor->bindVariables);
         if (origBoundByPos) {
-            anpErrorRaiseFromString(anpProgrammingErrorException, "positional and named binds cannot be intermixed");
-            return -1;
+            anpRaiseExceptionFromString(anpProgrammingErrorException, "positional and named binds cannot be intermixed");
+            return YAPI_ERROR;
         }
     } else {
         cursor->bindVariables = PyDict_New();
         if (!cursor->bindVariables) {
-            return -1;
+            return YAPI_ERROR;
         }
     }
 
@@ -345,19 +344,17 @@ YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsig
 
     while (PyDict_Next(parameters, &pos, &key, &value)) {
         PyObject* oldVar = PyDict_GetItem(cursor->bindVariables, key);
-        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, value, (AnpVar*)oldVar, &newVar,
-                                           deferTypeAssignment) < 0) {
-            return -1;
+        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, value, (AnpVar*)oldVar, &newVar) < 0) {
+            return YAPI_ERROR;
         }
         if (newVar != NULL) {
             if (PyDict_SetItem(cursor->bindVariables, key, (PyObject*)newVar) < 0) {
                 Py_DECREF(newVar);
-                return -1;
+                return YAPI_ERROR;
             }
             Py_DECREF(newVar);
         }
     }
-#endif
     return 0;
 }
 
@@ -537,16 +534,30 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
         return YAPI_SUCCESS;
     }
 
-    uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
-    AnpVar* bindVar;
-    for (uint32_t i = 0; i < bindNum; i++) {
-        bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
-        if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB) {
-            continue;
-        }
+    AnpVar*  bindVar;
+    if (PyList_Check(cursor->bindVariables)) {
+        uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
+        for (uint32_t i = 0; i < bindNum; i++) {
+            bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
+            if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB) {
+                continue;
+            }
 
-        if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS) {
-            return anpRaiseAndReturnIntException();
+            if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
+        }
+    } else {
+        PyObject * key, *var;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(cursor->bindVariables, &pos, &key, &var)) {
+            bindVar = (AnpVar*)var;
+            if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB) {
+                continue;
+            }
+            if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
         }
     }
     return 0;
