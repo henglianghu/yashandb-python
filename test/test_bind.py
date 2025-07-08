@@ -61,9 +61,40 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(data, row)
         cursor.execute("update test_bind_param_heap_1 set c=:arg0", {'arg0': 50,})
         self.connection.commit()
-        cursor.execute("select * from test_bind_param_heap_1")
+        cursor.execute("select * from test_bind_param_heap_1 order by a")
         row = cursor.fetchone()
         data = (2, 20.0, 50)
+        self.assertEqual(data, row)
+
+    def test_batch_bind_param(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists test_batch_param")
+        cursor.execute("create table test_batch_param(a int, b blob, c clob, d nclob)")
+        self.assertEqual(0, self.cursor.rowcount)
+        cursor.executemany(
+            "insert into test_batch_param values(:arg0, :arg1, :arg2, :arg3)",
+            [
+                {"arg0": 1, "arg1": b"111111", "arg2": "this is a clob1", "arg3": "这是一个NCLOB1"},
+                {"arg0": 2, "arg1": b"222222", "arg2": "this is a clob2", "arg3": "这是一个NCLOB2"},
+                {"arg0": 3, "arg1": b"333333", "arg2": "this is a clob3", "arg3": "这是一个NCLOB3"},
+            ],
+        )
+        self.connection.commit()
+        cursor.execute("delete from test_batch_param where a=:arg0", {'arg0': 1,})
+        self.connection.commit()
+        cursor.execute("select * from test_batch_param where a=:arg0", {'arg0': 2,})
+        row = cursor.fetchone()
+        data = (2, b"222222", "this is a clob2", "这是一个NCLOB2")
+        self.assertEqual(data, row)
+        cursor.execute("select * from test_batch_param where a=:arg0", {'arg0': 3,})
+        row = cursor.fetchone()
+        data = (3, b"333333", "this is a clob3", "这是一个NCLOB3")
+        self.assertEqual(data, row)
+        cursor.execute("update test_batch_param set d=:arg0 where a=:arg1", {'arg0': '更新了NCLOB2', 'arg1': 2})
+        self.connection.commit()
+        cursor.execute("select * from test_batch_param order by a")
+        row = cursor.fetchall()
+        data = [(2, b"222222", "this is a clob2", "更新了NCLOB2"), (3, b"333333", "this is a clob3", "这是一个NCLOB3")]
         self.assertEqual(data, row)
 
     

@@ -76,7 +76,7 @@ class TestCase(test_base.TestBaseCase):
             self.cursor.execute("insert into tb_python_blob_01_1 values(?)", (StringS,))
         except Exception as e: 
            error = str(e)
-           if('illegal conversion from CLOB to BLOB' not in error):
+           if('invalid hex number' not in error):
              raise Exception('failed')
         self.cursor.execute("select col1 from tb_python_blob_01_1")
         result=self.cursor.fetchone()
