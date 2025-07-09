@@ -564,17 +564,36 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
     
     if (PyLong_Check(value)) {
-        int64_t *iv = (int64_t *)var->data;
-        int64_t bindValue = PyLong_AsLongLong(value);
-        PyObject *pyError = PyErr_Occurred();
-        if ((bindValue == -1L) && (pyError != NULL)) {
-            PyErr_SetString(pyError, "fail to get long long value from PyObject");
-            return -1;
+        if (var->dbType == YAPI_TYPE_BIGINT) {
+            int64_t* iv = (int64_t*)var->data;
+            int64_t  bindValue = PyLong_AsLongLong(value);
+            PyObject* pyError = PyErr_Occurred();
+            if ((bindValue == -1L) && (pyError != NULL)) {
+                PyErr_SetString(pyError, "fail to get long long value from PyObject");
+                return -1;
+            }
+
+            iv[arrayPos] = bindValue;
+            var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
+            return 0;
+        } else if (var->dbType == YAPI_TYPE_VARCHAR) {
+            Py_ssize_t  enCodeStrSize = 0;
+            PyObject*   numberStr = PyObject_Str(value);
+            const char* bindStr = PyUnicode_AsUTF8AndSize(numberStr, &enCodeStrSize);
+            if (bindStr == NULL) {
+                return -1;
+            }
+            uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+            if (adjustAnpVarBuffSize(var, NUMBER_STRING_BUFFER_SIZE) < 0) {
+                return -1;
+            }
+
+            strcpy(var->data + var->dataOffset, bindStr);
+            var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += costSize;
+            var->data[var->dataOffset - 1] = '\0';
+            return 0;
         }
-        
-        iv[arrayPos] = bindValue;
-        var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
-        return 0;
     }
 
     if (PyFloat_Check(value)) {
@@ -726,6 +745,11 @@ YapiType anpGetType(PyObject * value)
     }
 
     if (PyLong_Check(value)) {
+        int overflow = 0;
+        PyLong_AsLongLongAndOverflow(value, &overflow);
+        if (overflow) {
+            return YAPI_TYPE_VARCHAR;
+        }
         return YAPI_TYPE_BIGINT;
     }
 
