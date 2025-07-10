@@ -540,7 +540,7 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
             }
             for (uint32_t i = 0; i < bindVar->elements; i++) {
                 if (yapiLobFreeTemporary(cursor->connection->hConn,
-                                         (YapiLobLocator*)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
+                                         *(YapiLobLocator**)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
                     YAPI_SUCCESS) {
                     return anpRaiseAndReturnIntException();
                 }
@@ -556,7 +556,7 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
             }
             for (uint32_t i = 0; i < bindVar->elements; i++) {
                 if (yapiLobFreeTemporary(cursor->connection->hConn,
-                                         (YapiLobLocator*)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
+                                         *(YapiLobLocator**)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
                     YAPI_SUCCESS) {
                     return anpRaiseAndReturnIntException();
                 }
@@ -731,7 +731,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
-        return NULL;
+        Py_RETURN_NONE;
     }
 
     if (anpCursorPerformBind(cursor) != YAPI_SUCCESS) {
@@ -993,7 +993,7 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
         }
         
         if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i) < 0) {
-            return NULL;
+            Py_RETURN_NONE;
         }
     }
 
