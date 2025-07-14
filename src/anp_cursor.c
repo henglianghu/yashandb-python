@@ -211,10 +211,6 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
         bool needCreateVar = false;
         anpAdjustVarTypeSize(value, &bindCostSize, &bindType);
         if (bindCostSize > CONVERT_TO_LOB_SIZE) {
-            if (oldVar->elements > 1) {
-                (void)anpRaiseExceptionFromString(anpNotSupportedException, "batch execute mix lob bind");
-                return YAPI_ERROR;
-            }
             needCreateVar = true;
         }
 
@@ -324,17 +320,16 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
 
 YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsigned numElements, unsigned arrayPos)
 {
-#if 0
     if (cursor->bindVariables) {
-        YacUint32 origBoundByPos = PyList_Check(cursor->bindVariables);
+        uint32_t origBoundByPos = PyList_Check(cursor->bindVariables);
         if (origBoundByPos) {
-            anpErrorRaiseFromString(anpProgrammingErrorException, "positional and named binds cannot be intermixed");
-            return -1;
+            anpRaiseExceptionFromString(anpProgrammingErrorException, "positional and named binds cannot be intermixed");
+            return YAPI_ERROR;
         }
     } else {
         cursor->bindVariables = PyDict_New();
         if (!cursor->bindVariables) {
-            return -1;
+            return YAPI_ERROR;
         }
     }
 
@@ -345,19 +340,17 @@ YapiResult anpCursorSetBindByName(AnpCursor* cursor, PyObject* parameters, unsig
 
     while (PyDict_Next(parameters, &pos, &key, &value)) {
         PyObject* oldVar = PyDict_GetItem(cursor->bindVariables, key);
-        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, value, (AnpVar*)oldVar, &newVar,
-                                           deferTypeAssignment) < 0) {
-            return -1;
+        if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, value, (AnpVar*)oldVar, &newVar) < 0) {
+            return YAPI_ERROR;
         }
         if (newVar != NULL) {
             if (PyDict_SetItem(cursor->bindVariables, key, (PyObject*)newVar) < 0) {
                 Py_DECREF(newVar);
-                return -1;
+                return YAPI_ERROR;
             }
             Py_DECREF(newVar);
         }
     }
-#endif
     return 0;
 }
 
@@ -517,12 +510,12 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
 
-        if (anpVarIsLobType(var)) {
-            if (yapiBindColumn(cursor->hStmt, pos, var->transType, &var->data, -1, var->indicator) != YAPI_SUCCESS) {
-                return anpRaiseAndReturnIntException();
-            }
-            continue;
-        }
+        // if (anpVarIsLobType(var)) {
+        //     if (yapiBindColumn(cursor->hStmt, pos, var->transType, var->data, -1, var->indicator) != YAPI_SUCCESS) {
+        //         return anpRaiseAndReturnIntException();
+        //     }
+        //     continue;
+        // }
 
         if (yapiBindColumn(cursor->hStmt, pos, var->transType, var->data, size, var->indicator) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
@@ -537,16 +530,37 @@ static int anpTryReleaseLobLoc(AnpCursor* cursor)
         return YAPI_SUCCESS;
     }
 
-    uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
-    AnpVar* bindVar;
-    for (uint32_t i = 0; i < bindNum; i++) {
-        bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
-        if (bindVar->transType != YAPI_TYPE_CLOB && bindVar->transType != YAPI_TYPE_BLOB) {
-            continue;
+    AnpVar*  bindVar;
+    if (PyList_Check(cursor->bindVariables)) {
+        uint32_t bindNum = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
+        for (uint32_t i = 0; i < bindNum; i++) {
+            bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
+            if (!anpVarIsLobType(bindVar)) {
+                continue;
+            }
+            for (uint32_t i = 0; i < bindVar->elements; i++) {
+                if (yapiLobFreeTemporary(cursor->connection->hConn,
+                                         *(YapiLobLocator**)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
+                    YAPI_SUCCESS) {
+                    return anpRaiseAndReturnIntException();
+                }
+            }
         }
-
-        if (yapiLobFreeTemporary(cursor->connection->hConn, (YapiLobLocator*)bindVar->data) != YAPI_SUCCESS) {
-            return anpRaiseAndReturnIntException();
+    } else if (PyDict_Check(cursor->bindVariables)) {
+        PyObject * key, *var;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(cursor->bindVariables, &pos, &key, &var)) {
+            bindVar = (AnpVar*)var;
+            if (!anpVarIsLobType(bindVar)) {
+                continue;
+            }
+            for (uint32_t i = 0; i < bindVar->elements; i++) {
+                if (yapiLobFreeTemporary(cursor->connection->hConn,
+                                         *(YapiLobLocator**)(bindVar->data + i * sizeof(YapiLobLocator*))) !=
+                    YAPI_SUCCESS) {
+                    return anpRaiseAndReturnIntException();
+                }
+            }
         }
     }
     return 0;
@@ -623,19 +637,33 @@ static void resetBindAnpVars(AnpCursor* cursor)
     }
 
     bool isList = PyList_Check(cursor->bindVariables);
-    if (!isList) {
-        return;
-    }
+    if (isList) {
+        uint32_t bindVarsCnt = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
+        for (uint32_t i = 0; i < bindVarsCnt; i++) {
+            PyObject* origVar = PyList_GET_ITEM(cursor->bindVariables, i);
+            if ((origVar == NULL) || (origVar == Py_None)) {
+                continue;
+            }
 
-    uint32_t bindVarsCnt = (uint32_t)PyList_GET_SIZE(cursor->bindVariables);
-    for (uint32_t i = 0; i < bindVarsCnt; i++) {
-        PyObject* origVar = PyList_GET_ITEM(cursor->bindVariables, i);
-        if ((origVar == NULL) || (origVar == Py_None)) {
-            continue;
+            ((AnpVar*)origVar)->dataOffset = 0;
         }
-
-        ((AnpVar*)origVar)->dataOffset = 0;
     }
+
+    bool isDict = PyDict_Check(cursor->bindVariables);
+    if (isDict) {
+        Py_ssize_t pos = 0;
+        PyObject*  key;
+        PyObject*  value;
+
+        while (PyDict_Next(cursor->bindVariables, &pos, &key, &value)) {
+            PyObject* origVar = PyDict_GetItem(cursor->bindVariables, key);
+            if ((origVar == NULL) || (origVar == Py_None)) {
+                continue;
+            }
+            ((AnpVar*)origVar)->dataOffset = 0;
+        }
+    }
+
 }
 
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
@@ -703,7 +731,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
-        return NULL;
+        Py_RETURN_NONE;
     }
 
     if (anpCursorPerformBind(cursor) != YAPI_SUCCESS) {
@@ -826,7 +854,66 @@ static PyObject* anpCursorFetchOne(AnpCursor* cursor, PyObject* args)
 
 static PyObject* anpCursorCallProc(AnpCursor* cursor, PyObject* args)
 {
-    return anpRaiseExceptionFromString(anpNotSupportedException, "callproc() not implement");
+    const char* procName;
+    PyObject*   params = NULL;
+
+    if (!PyArg_ParseTuple(args, "s|O", &procName, &params)) {
+        return NULL;
+    }
+
+    uint32_t paramCnt = 0;
+    if (params) {
+        if (!PySequence_Check(params)) {
+            return NULL;
+        }
+        paramCnt = PySequence_Size(params);
+    }
+
+    const char* sql_format = "begin %s(%s); end;";
+    char paramListStr[PROCEDURE_PARAM_LIST_BUFFER_SIZE] = "";
+    for (uint32_t i = 0; i < paramCnt; i++) {
+        if (i == 0) {
+            strcat(paramListStr, "?");
+            continue;
+        }
+        strcat(paramListStr, ",?");
+    }
+
+    char sql[PROCEDURE_SQL_BUFFER_SIZE] = "";
+    sprintf(sql, sql_format, procName, paramListStr);
+
+    PyObject* argsTuple = PyTuple_New(2);
+    if (!argsTuple) {
+        return anpRaiseAndReturnNullException();
+    }
+    PyTuple_SetItem(argsTuple, 0, PyUnicode_FromString(sql));
+    PyTuple_SetItem(argsTuple, 1, params);
+    if (!anpCursorExecute(cursor, argsTuple, NULL)) {
+        Py_DECREF(argsTuple);
+        return NULL;
+    }
+    Py_DECREF(argsTuple);
+
+    PyObject* result = PyList_New(0);
+    if (!result) {
+        return NULL;
+    }
+    if (!cursor->bindVariables) {
+        return result;
+    }
+    Py_ssize_t size = PyList_GET_SIZE(cursor->bindVariables);
+    AnpVar* bindVar = NULL;
+    PyObject* value = NULL;
+    for (uint32_t i = 0; i < size; i++) {
+        bindVar = (AnpVar*)PyList_GET_ITEM(cursor->bindVariables, i);
+        value = anpVarGetSingleValue(bindVar->connection->hConn, bindVar, 0);
+        if (PyList_Append(result, value)) {
+            Py_DECREF(value);
+            return NULL;
+        }
+        Py_DECREF(value);
+    }
+    return result;
 }
 
 static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr)
@@ -906,7 +993,7 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
         }
         
         if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i) < 0) {
-            return NULL;
+            Py_RETURN_NONE;
         }
     }
 

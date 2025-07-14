@@ -2,6 +2,7 @@ from decimal import Decimal
 import datetime
 
 import test_base
+import yaspy
 
 class TestCase(test_base.TestBaseCase):
 
@@ -86,8 +87,9 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(data, row)
         try:
             cursor.execute("insert into test_int_value values(?)", (9223372036854775808,))
-        except OverflowError as e:
-            self.assertEqual(type(e), OverflowError)
+        except yaspy.DatabaseError as e:
+            if 'value is larger than BIGINT allowed' not in str(e):
+                raise Exception('FAILED')
         else:
             self.fail('OverflowError not rasied')
         cursor.execute("drop table if exists test_int_value")
@@ -233,6 +235,21 @@ class TestCase(test_base.TestBaseCase):
                           ('9', 14), ('df', 15), ('中国、。，。反对反对’;', 16)])
         cursor.execute("drop table if exists tb_python_clob_06_1")
         cursor.close()
+
+    def test_fetch_number(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_11_1")
+        # I1.建表
+        cursor.execute("create table tb_python_ydbrd_6583_11_1(col1 number(38))")
+        values = [9223372036854775808]
+        for value in values:
+            cursor.execute("insert into tb_python_ydbrd_6583_11_1 values(?)", (value,))
+        self.connection.commit()
+        cursor.execute("select * from tb_python_ydbrd_6583_11_1")
+        result = cursor.fetchall()
+        self.assertEqual(result, [(Decimal('9223372036854775808'),)])
+        # I8.删除表
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_11_1")
 
 if __name__ == "__main__":
     test_base.run_test_cases()
