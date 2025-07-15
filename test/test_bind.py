@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import test_base
+import yaspy
 
 class TestCase(test_base.TestBaseCase):
     def setUp(self):
@@ -97,6 +98,55 @@ class TestCase(test_base.TestBaseCase):
         data = [(2, b"222222", "this is a clob2", "更新了NCLOB2"), (3, b"333333", "this is a clob3", "这是一个NCLOB3")]
         self.assertEqual(data, row)
 
-    
+    def test_sdv_tb_python_ydbrd_sit_29_1(self):
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
+        cursor = conn.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_sit_29_1")
+        # I1.建表
+        cursor.execute("create table tb_python_ydbrd_sit_29_1(col1 varchar(50),col2 int)")
+        cursor.execute("insert into  tb_python_ydbrd_sit_29_1 values(null,0)")
+        # I2.Using  Bind  Variables
+        sql = """insert into tb_python_ydbrd_sit_29_1 values(:col1,:col2)"""
+        cursor.execute(sql, ['fdsfdf', 1])
+        cursor.execute("commit")
+        cursor.execute("select trim(col1),col2  from tb_python_ydbrd_sit_29_1   order by col2 ")
+        result = cursor.fetchall()
+        print('result_1', result)
+        self.assertEqual(result, [(None, 0), ('fdsfdf', 1)])
+        # I3.Binding By Name or Position
+        cursor.execute("""insert into tb_python_ydbrd_sit_29_1 values(:col1,:col2)""", ("中国", 2))
+        cursor.execute("commit")
+        cursor.execute("select trim(col1),col2  from tb_python_ydbrd_sit_29_1   order by col2 ")
+        result = cursor.fetchall()
+        print('result_2', result)
+        self.assertEqual(result, [(None, 0), ('fdsfdf', 1), ('中国', 2)])
+        data = dict(col1='fdfdf', col2=3)
+        cursor.execute("""insert into tb_python_ydbrd_sit_29_1 values(:col1,:col2)""", data)
+        data = ('fdfdf', 999)
+        cursor.execute("""insert into tb_python_ydbrd_sit_29_1 values(:col1,:col2)""", data)
+        cursor.execute("commit")
+        cursor.execute("select trim(col1),col2  from tb_python_ydbrd_sit_29_1   order by col2 ")
+        result = cursor.fetchall()
+        print('result_3', result)
+        self.assertEqual(result, [(None, 0), ('fdsfdf', 1), ('中国', 2), ('fdfdf', 3), ('fdfdf', 999)])
+        cursor.execute("commit")
+        cursor.execute("select trim(col1),col2  from tb_python_ydbrd_sit_29_1   order by col2 ")
+        result = cursor.fetchall()
+        print('result_4', result)
+        self.assertEqual(result, [(None, 0), ('fdsfdf', 1), ('中国', 2), ('fdfdf', 3), ('fdfdf', 999)])
+        # I5.Binding ROWID Values
+        cursor.execute("""select rowid, col1, col2  from tb_python_ydbrd_sit_29_1  where col2 = :col2""", [1])
+        rowid, col1, col2 = cursor.fetchone()
+        print("rowid", rowid)
+        cursor.execute(
+            """update tb_python_ydbrd_sit_29_1 set  col1 = :rowid""", [rowid])
+        cursor.execute("select trim(col1),col2  from tb_python_ydbrd_sit_29_1   order by col2 ")
+        result = cursor.fetchall()
+        print('result_5', result)
+        # I6.删表，清理环境
+        cursor.execute("drop table tb_python_ydbrd_sit_29_1")
+        cursor.close()
+        conn.close()
+
 if __name__ == "__main__":
     test_base.run_test_cases()
