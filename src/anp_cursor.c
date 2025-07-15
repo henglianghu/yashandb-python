@@ -666,14 +666,53 @@ static void resetBindAnpVars(AnpCursor* cursor)
 
 }
 
+static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr, PyObject* execArgs)
+{
+    if (sqlStr == cursor->statment && !cursor->isFail) {
+        sqlStr = cursor->statment;
+        if (execArgs && ((PySequence_Check(cursor->bindVariables) ^ PySequence_Check(execArgs)) ||
+                         (PyDict_Check(cursor->bindVariables) ^ PyDict_Check(execArgs)))) {
+            Py_CLEAR(cursor->bindVariables);
+        }
+        return 0;
+    }
+
+    Py_CLEAR(cursor->statment);
+    Py_XINCREF(sqlStr);
+    cursor->statment = sqlStr;
+    Py_CLEAR(cursor->fetchVariables);
+    Py_CLEAR(cursor->bindVariables);
+
+    int status;
+    char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(sqlStr));
+    Py_BEGIN_ALLOW_THREADS
+        if (cursor->hStmt != NULL) {
+            yapiReleaseStmt(cursor->hStmt);
+            cursor->hStmt = NULL;
+        }
+        status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
+    Py_END_ALLOW_THREADS
+    if (status != YAPI_SUCCESS) {
+        cursor->isFail = 1;
+        return anpRaiseAndReturnIntException();
+    }
+
+    int32_t len;
+    if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnIntException();
+    }
+
+    return 0;
+}
+
 static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
-    PyObject *statement, *execArgs;
+    PyObject *sqlStr, *execArgs;
     int16_t  numQueryColumns;
     int       status;
 
     execArgs = NULL;
-    if (!PyArg_ParseTuple(args, "O|O", &statement, &execArgs)) {
+    if (!PyArg_ParseTuple(args, "O|O", &sqlStr, &execArgs)) {
         return NULL;
     }
 
@@ -699,32 +738,10 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         return NULL;
     }
 
-    if (statement == cursor->statment && !cursor->isFail) {
-        statement = cursor->statment;
-    } else {
-        Py_CLEAR(cursor->statment);
-        Py_XINCREF(statement);
-        cursor->statment = statement;
-        Py_CLEAR(cursor->fetchVariables);
-        Py_CLEAR(cursor->bindVariables);
-
-        char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(statement));
-        Py_BEGIN_ALLOW_THREADS
-            if (cursor->hStmt != NULL) {
-                yapiReleaseStmt(cursor->hStmt);
-                cursor->hStmt = NULL;
-            }
-            status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
-        Py_END_ALLOW_THREADS
-        if (status != YAPI_SUCCESS) {
-            cursor->isFail = 1;
-            return anpRaiseAndReturnNullException();
-        }
-        int32_t len;
-        if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAPI_SUCCESS) {
-            return anpRaiseAndReturnNullException();
-        }
+    if (anpInternalPrepare(cursor, sqlStr, execArgs) < 0) {
+        return NULL;
     }
+
     if (yapiNumResultCols(cursor->hStmt, &numQueryColumns) != YAPI_SUCCESS) {
         return anpRaiseAndReturnNullException();
     }
@@ -916,41 +933,6 @@ static PyObject* anpCursorCallProc(AnpCursor* cursor, PyObject* args)
     return result;
 }
 
-static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr)
-{
-    if (sqlStr == cursor->statment && !cursor->isFail) {
-        sqlStr = cursor->statment;
-        return 0;
-    }
-
-    Py_CLEAR(cursor->statment);
-    Py_XINCREF(sqlStr);
-    cursor->statment = sqlStr;
-    Py_CLEAR(cursor->fetchVariables);
-    Py_CLEAR(cursor->bindVariables);
-
-    int status;
-    char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(sqlStr));
-    Py_BEGIN_ALLOW_THREADS
-        if (cursor->hStmt != NULL) {
-            yapiReleaseStmt(cursor->hStmt);
-            cursor->hStmt = NULL;
-        }
-        status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
-    Py_END_ALLOW_THREADS
-    if (status != YAPI_SUCCESS) {
-        cursor->isFail = 1;
-        return anpRaiseAndReturnIntException();
-    }
-
-    int32_t len;
-    if (yapiGetStmtAttr(cursor->hStmt, YAPI_ATTR_SQLTYPE, &cursor->sqlType, sizeof(cursor->sqlType), &len) != YAPI_SUCCESS) {
-        return anpRaiseAndReturnIntException();
-    }
-
-    return 0;
-}
-
 static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObject* keywordArgs)
 {
     PyObject *sqlStr;
@@ -974,8 +956,7 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
     int16_t  numQueryColumns;
     int       status;
 
-    // do prepare, todo: extract a func() for both here and the execute()'s code
-    if (anpInternalPrepare(cursor, sqlStr) < 0) {
+    if (anpInternalPrepare(cursor, sqlStr, execArgs) < 0) {
         return NULL;
     }
 
