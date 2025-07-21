@@ -69,7 +69,8 @@ class TestCase(test_base.TestBaseCase):
              raise Exception('failed')
         seed = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+=-"
         str1 = []
-        for i in range(32001):
+        # insert clob by loblocator, the size exceeds 65534
+        for i in range(65535):
             str1.append(random.choice(seed))
             StringS = ''.join(str1) 
         try:
@@ -136,6 +137,15 @@ class TestCase(test_base.TestBaseCase):
         self.cursor.execute("select col1,col2  from tb_python_clob_06_1 order by col2")
         result=self.cursor.fetchall()
         self.assertEqual(result,[('中国、。，。反对反对’;', 0)])
+
+        self.cursor.execute("drop table if exists tb_python_clob_06_1")
+        self.cursor.execute("create table tb_python_clob_06_1(col1 blob,col2 int)")
+        try:
+            self.cursor.execute("insert into tb_python_clob_06_1 values(?,0)", [9223372036854775808])
+        except Exception as e:
+            err = str(e)
+            if "illegal conversion from NUMBER to BLOB" not in err:
+                raise Exception("FAILED")
 
     def test_sdv_tb_python_clob_03(self):
         self.cursor.execute("drop table if exists tb_python_clob_03_1")

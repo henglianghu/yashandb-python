@@ -164,6 +164,13 @@ class TestCase(test_base.TestBaseCase):
         expectRs = [(None,), (b'http://c.biancheng.net/python/',), 
             (b'C\xe8\xaf\xad\xe8\xa8\x80\xe4\xb8\xad\xe6\x96\x87\xe7\xbd\x918\xe5\xb2\x81\xe4\xba\x86',)]
         self.assertEqual(results, expectRs)
+        # 超过bigint的数值插入raw类型列
+        try:
+            cursor.execute("insert into tb_python_ydbrd_6583_28_4 values(?, ?)", (9223372036854775808, i, ))
+        except Exception as e:
+            err = str(e)
+            if "illegal conversion from NUMBER to RAW" not in err:
+                raise Exception("FAILED")
   
         value1 = b'http://c.biancheng.net/python/'
         cursor.execute("update tb_python_ydbrd_6583_28_4 set col1 = :1 where col2 = :2", (value1, 2,))
@@ -250,6 +257,24 @@ class TestCase(test_base.TestBaseCase):
         self.assertEqual(result, [(Decimal('9223372036854775808'),)])
         # I8.删除表
         cursor.execute("drop table if exists tb_python_ydbrd_6583_11_1")
+
+    def test_sdv_tb_python_ydbrd_6583_06_1(self):
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
+        cursor = conn.cursor()
+        cursor.execute("drop table if exists tb_python_ydbrd_6583_06_1")
+        # I1.建表，插入数据
+        cursor.execute("create table tb_python_ydbrd_6583_06_1(col1 float)")
+        cursor.execute("insert into tb_python_ydbrd_6583_06_1 values(null)")
+        # 备注：2147483647会显示为2147483648.0，oracale的binary_float也是，float的会有失真
+        # I2.插入数据(数据库解析）
+        value = 999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999
+        # value = 999999999999999999999999999999999999999999999999999999999999999
+        try:
+            cursor.execute("insert into tb_python_ydbrd_6583_06_1 values(?)", (value,))
+        except Exception as e:
+            err = str(e)
+            if "not a valid number" not in err:
+                raise Exception("FAILED")
 
 if __name__ == "__main__":
     test_base.run_test_cases()
