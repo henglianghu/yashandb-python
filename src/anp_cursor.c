@@ -748,7 +748,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
-        Py_RETURN_NONE;
+        return NULL;
     }
 
     if (anpCursorPerformBind(cursor) != YAPI_SUCCESS) {
