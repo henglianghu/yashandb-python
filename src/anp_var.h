@@ -21,6 +21,7 @@ typedef struct StAnpVar {
     YapiType   dbType;
     YapiType   transType;
     YapiParamDirection bindDir;
+    bool isLobTemporary;
 } AnpVar;
 
 typedef struct StVarAssist
@@ -34,6 +35,7 @@ typedef struct StVarAssist
 
 YapiResult anpRegisteVarObject(PyObject* module);
 YapiResult anpInitDecimal();
+YapiResult anpInitJson();
 
 bool   anpCheckVar(PyObject* object);
 AnpVar*   anpNewVar(AnpCursor* cursor, VarAssist *assist);
@@ -44,5 +46,7 @@ int     anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObj
 AnpVar* anpVarNewByValue(AnpCursor* cursor, PyObject* value, Py_ssize_t numElements, bool bindIn);
 void anpAdjustVarTypeSize(PyObject* value, uint32_t* size,YapiType* type);
 bool anpVarIsLobType(AnpVar* var);
+int anpGetSize(PyObject * value);
+YapiType anpGetType(PyObject * value);
 
 #endif  // ANCHOR_ANP_VAR_H

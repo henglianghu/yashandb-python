@@ -239,6 +239,32 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("drop table tb_python_ydbrd_6583_51_1")
         cursor.close()
 
+    def test_lob_free_multiple_times(self, num_tests=100):
+        for _ in range(num_tests):
+            conn = yaspy.connect(
+                dsn=self.getDsn(), user=self.user, password=self.passwd
+            )
+            cursor = conn.cursor()
+            clob = cursor.var(yaspy.CLOB).setvalue("clob")
+            blob = cursor.var(yaspy.BLOB).setvalue(b"blob")
+            cursor.execute("drop table if exists test_lob_free")
+            cursor.execute("create table test_lob_free(c1 clob, c2 blob)")
+            binary_data = b"Some Binary Data"
+            cursor.execute(
+                "insert into test_lob_free values(lpad('abcdef', 32000, '*'), ?)",
+                (binary_data,),
+            )
+            conn.commit()
+            cursor.execute("select * from test_lob_free")
+            result = cursor.fetchone()
+            self.assertEqual(result, ('*' * 31994 + 'abcdef', b"Some Binary Data"))
+            cursor.execute("drop table if exists test_blob_fetch")
+            clob.free()
+            blob.free()
+            cursor.close()
+            conn.close()
+
+
 
 if __name__ == "__main__":
     test_base.run_test_cases()

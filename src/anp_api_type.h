@@ -3,8 +3,6 @@
 
 #include "anp_module.h"
 
-
-
-
+YapiResult anpRegisterApiType(PyObject *module);
 
 #endif

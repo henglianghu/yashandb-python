@@ -49,11 +49,13 @@ uint32_t anpGetDisplaySize(YapiColumnDesc* desc)
         case YAPI_TYPE_NCHAR:
         case YAPI_TYPE_NVARCHAR:
         case YAPI_TYPE_CLOB:
+        case YAPI_TYPE_NCLOB:
             displaySize = codSizeAlign4(desc->size) + 1;
             break;
 
         case YAPI_TYPE_BINARY:
         case YAPI_TYPE_BLOB:
+        case YAPI_TYPE_JSON:
             displaySize = codSizeAlign4(desc->size * 2);
             break;
 
@@ -265,6 +267,12 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
 
     uint32_t numParams = (uint32_t)temp;
     uint32_t origNumParams = 0;
+    // check if sql param count
+    if (cursor->sqlParamCnt < numParams) {
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "too many bind parameters");
+        return YAPI_ERROR;
+    }
+
     if (cursor->bindVariables) {
         uint32_t origBoundByPos = PyList_Check(cursor->bindVariables);
         if (!origBoundByPos) {
@@ -431,6 +439,7 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize, uint32_t maxChar
         case YAPI_TYPE_BLOB:
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_NCLOB:
+        case YAPI_TYPE_JSON:
             *bindSize = -1;
             break;
         default:
@@ -490,7 +499,7 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
             return anpRaiseAndReturnIntException();
         }
 
-        if ((queryInfo.type > YAPI_TYPE_CURSOR) && (queryInfo.type != YAPI_TYPE_NUMBER_FLOAT)) {
+        if ((queryInfo.type > YAPI_TYPE_CURSOR) && (queryInfo.type != YAPI_TYPE_NUMBER_FLOAT) && (queryInfo.type != YAPI_TYPE_JSON)) {
             anpRaiseExceptionFromString(anpNotSupportedException, "unsupported binding type");
             return -1;
         }
@@ -509,13 +518,6 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
         }
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
-
-        // if (anpVarIsLobType(var)) {
-        //     if (yapiBindColumn(cursor->hStmt, pos, var->transType, var->data, -1, var->indicator) != YAPI_SUCCESS) {
-        //         return anpRaiseAndReturnIntException();
-        //     }
-        //     continue;
-        // }
 
         if (yapiBindColumn(cursor->hStmt, pos, var->transType, var->data, size, var->indicator) != YAPI_SUCCESS) {
             return anpRaiseAndReturnIntException();
@@ -579,7 +581,41 @@ int yaspyGetDbTypeFromPyType(PyObject *type, YapiType *dbType)
         return 0;
     }
 
-    PyErr_SetString(PyExc_TypeError, "expecting dbapi type");
+    // support python native type convert to db type
+    if (PyType_Check(type)) {
+        PyTypeObject* t = (PyTypeObject*)type;
+        if (t == Py_TYPE(Py_None)) {
+            *dbType = YAPI_TYPE_UNKNOWN;
+        } else if (t == &PyBool_Type) {
+            *dbType = YAPI_TYPE_BOOL;
+        } else if (t == &PyUnicode_Type) {
+            *dbType = YAPI_TYPE_VARCHAR;
+        } else if (t == &PyBytes_Type) {
+            *dbType = YAPI_TYPE_BINARY;
+        } else if (t == &PyLong_Type) {
+            *dbType = YAPI_TYPE_BIGINT;
+        } else if (t == &PyFloat_Type) {
+            *dbType = YAPI_TYPE_DOUBLE;
+        } else if (t == anpPyTypeDateTime){
+            *dbType = YAPI_TYPE_TIMESTAMP;
+        } else if (t == anpPyTypeDate) {
+            *dbType = YAPI_TYPE_DATE;
+        } else if (t == anpPyTypeTime) {
+            *dbType = YAPI_TYPE_SHORTTIME;
+        } else if (t == anpPyTypeDecimal) {
+            *dbType = YAPI_TYPE_NUMBER;
+        } else if (t == anpPyTypeTimeDelta) {
+            *dbType = YAPI_TYPE_DS_INTERVAL;
+        } else if (t == &PyList_Type || t == &PyDict_Type) {
+            *dbType = YAPI_TYPE_JSON;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "unsupported python type to convert to db type");
+            return -1;
+        }
+        return 0;
+    } 
+
+    PyErr_SetString(PyExc_TypeError, "expecting dbapi type or python type");
     return -1;
 }
 
@@ -588,14 +624,50 @@ static int getDefaultTypeSize(YapiType type)
     int typeSize = 0;
     switch (type)
     {
+        case YAPI_TYPE_BOOL:
         case YAPI_TYPE_TINYINT:
+            typeSize = 1;
+            break;
         case YAPI_TYPE_SMALLINT:
+            typeSize = 2;
+            break;
         case YAPI_TYPE_INTEGER:
+        case YAPI_TYPE_FLOAT:
+            typeSize = 4;
+            break;
         case YAPI_TYPE_BIGINT:
+        case YAPI_TYPE_DOUBLE:
+        case YAPI_TYPE_DATE:
+        case YAPI_TYPE_SHORTTIME:
+        case YAPI_TYPE_TIMESTAMP:
+        case YAPI_TYPE_DS_INTERVAL:
+        case YAPI_TYPE_BIT:
             typeSize = 8;
             break;
+        case YAPI_TYPE_NUMBER:
+            typeSize = 40;
+            break;
+        case YAPI_TYPE_CHAR:
+        case YAPI_TYPE_VARCHAR:
+        case YAPI_TYPE_NCHAR:
+        case YAPI_TYPE_NVARCHAR:
+        case YAPI_TYPE_BINARY:
+            typeSize = 8000;
+            break;
+        case YAPI_TYPE_ROWID:
+            typeSize = 44;
+            break;
+        case YAPI_TYPE_JSON:
+            typeSize = CONVERT_TO_LOB_SIZE;
+            break;
+        case YAPI_TYPE_UNKNOWN:
+            typeSize = 1;
+            break;
+        case YAPI_TYPE_YM_INTERVAL:
+            typeSize = 128;
+            break;
         default:
-            typeSize = 20;
+            typeSize = -1;
             break;
     }
 
@@ -626,6 +698,11 @@ static PyObject* yaspyCursorVar(AnpCursor* cursor, PyObject* args, PyObject* key
     VarAssist assist = {.numElements = arraySize, .type = dbType, .size = size, .isArray = false, .bindIn = false};
     AnpVar *var = anpNewVar(cursor, &assist);
     var->bindDir = YAPI_PARAM_OUTPUT;
+    if (dbType == YAPI_TYPE_NCHAR || dbType == YAPI_TYPE_NVARCHAR || dbType == YAPI_TYPE_JSON ||
+        dbType == YAPI_TYPE_NUMBER || dbType == YAPI_TYPE_YM_INTERVAL || dbType == YAPI_TYPE_ROWID ||
+        dbType == YAPI_TYPE_BIT) {
+        var->dbType = YAPI_TYPE_VARCHAR;
+    }
 
     return (PyObject*)var;
 }
@@ -682,15 +759,21 @@ static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr, PyObject* exe
     cursor->statment = sqlStr;
     Py_CLEAR(cursor->fetchVariables);
     Py_CLEAR(cursor->bindVariables);
+    cursor->sqlParamCnt = 0;
 
     int status;
     char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(sqlStr));
+    int32_t sqlLen = (int32_t)strlen(sql);
+    if (yapiGetSqlParamCount(sql, sqlLen, &cursor->sqlParamCnt) != YAPI_SUCCESS) {
+        cursor->isFail = 1;
+        return anpRaiseAndReturnIntException();
+    }
     Py_BEGIN_ALLOW_THREADS
         if (cursor->hStmt != NULL) {
             yapiReleaseStmt(cursor->hStmt);
             cursor->hStmt = NULL;
         }
-        status = yapiPrepare(cursor->connection->hConn, sql, (int32_t)strlen(sql), &cursor->hStmt);
+        status = yapiPrepare(cursor->connection->hConn, sql, sqlLen, &cursor->hStmt);
     Py_END_ALLOW_THREADS
     if (status != YAPI_SUCCESS) {
         cursor->isFail = 1;
@@ -748,7 +831,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
-        return NULL;
+        return PyErr_Occurred() ? NULL : anpRaiseAndReturnNullException();
     }
 
     if (anpCursorPerformBind(cursor) != YAPI_SUCCESS) {
@@ -792,7 +875,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_INCREF(cursor);
         return (PyObject*)cursor;
     }
-    return NULL;
+    return anpRaiseAndReturnNullException();
 }
 
 static PyObject* anpCursorClose(AnpCursor* cursor, PyObject* args)

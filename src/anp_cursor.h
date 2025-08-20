@@ -19,6 +19,7 @@ typedef struct StAnpCursor {
     uint32_t setInputSizes;
     uint32_t fetchArraySize;
     uint64_t rowCount;
+    uint16_t sqlParamCnt;
 
     bool isOpen;
     bool isFail;

@@ -4,9 +4,13 @@
 
 PyTypeObject *anpPyTypeDate;
 PyTypeObject *anpPyTypeDateTime;
+PyTypeObject *anpPyTypeTime;
+PyTypeObject *anpPyTypeTimeDelta;
+PyTypeObject *anpPyTypeDecimal;
 
 bool anpVarIsLobType(AnpVar* var) {
-    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB) {
+    if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB ||
+        var->transType == YAPI_TYPE_JSON) {
         return true;
     }
 
@@ -65,9 +69,99 @@ static PyObject* yaspyVarGetValues(AnpVar *var, void *unused)
     return values;
 }
 
+static PyObject* anpVarGetElementCount(AnpVar* var)
+{
+    return PyLong_FromLong(var->elements);
+}
+
+static PyObject* yaspyVarSetValue(AnpVar* var, PyObject *args)
+{
+    PyObject *value;
+    uint32_t pos = 0;
+
+    if (!PyArg_ParseTuple(args, "O|i", &value, &pos)) {
+        return NULL;
+    }
+
+    if (anpVarSetValue(var->connection->hConn, var, pos, value) < 0) {
+        return NULL;
+    }
+
+    var->size = anpGetSize(value);
+    switch (var->dbType) {
+        case YAPI_TYPE_BIGINT: {
+            int overflow = 0;
+            PyLong_AsLongLongAndOverflow(value, &overflow);
+            if (overflow) {
+                var->dbType = YAPI_TYPE_VARCHAR;
+            }
+            break;
+        }
+        case YAPI_TYPE_NUMBER:
+        case YAPI_TYPE_ROWID:
+        case YAPI_TYPE_JSON:
+        case YAPI_TYPE_YM_INTERVAL:
+            var->dbType = YAPI_TYPE_VARCHAR;
+            break;
+        case YAPI_TYPE_BIT:
+            var->dbType = YAPI_TYPE_BIGINT;
+            break;
+        default:
+            break;
+    }
+
+
+    var->bindDir = YAPI_PARAM_INPUT;
+    Py_INCREF(var);
+    return (PyObject*)var;
+}
+
+static PyObject* yaspyVarGetValue(AnpVar* var, PyObject* args, PyObject* keywordArgs)
+{
+    static char *keywordList[] = { "pos", NULL };
+    uint32_t pos = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "|i", keywordList, &pos)) {
+        return NULL;
+    }
+    return anpVarGetSingleValue(var->connection->hConn, var, pos);
+}
+
+static PyObject* yaspyVarFree(AnpVar* var)
+{
+    if (var->data) {
+        if (anpVarIsLobType(var)) {
+            for (uint32_t i = 0; i < var->elements; i++) {
+                if (var->isLobTemporary &&
+                    yapiLobFreeTemporary(var->connection->hConn,
+                                         *(YapiLobLocator**)(var->data + i * sizeof(YapiLobLocator*))) !=
+                        YAPI_SUCCESS) {
+                    (void)anpRaiseAndReturnIntException();
+                }
+                if (yapiLobDescFree(*(YapiLobLocator**)(var->data + i * sizeof(YapiLobLocator*)), var->transType) !=
+                    YAPI_SUCCESS) {
+                    (void)anpRaiseAndReturnNullException();
+                }
+            }
+        }
+        PyMem_Free(var->data);
+        var->data = NULL;
+    }
+    Py_RETURN_NONE;
+}
+
 static PyGetSetDef anpCalcMembers[] = {
+    { "actual_elements", (getter) anpVarGetElementCount, 0, 0, 0 },
+    { "actualElements", (getter) anpVarGetElementCount, 0, 0, 0 },
     { "type",           (getter)anpVarGetType,                   0, 0, 0 },
     { "values",         (getter)yaspyVarGetValues,               0, 0, 0 },
+    { NULL }
+};
+
+static PyMethodDef anpVarMethods[] = {
+    { "setvalue" , (PyCFunction) yaspyVarSetValue, METH_VARARGS },
+    { "getvalue" , (PyCFunction) yaspyVarGetValue, METH_VARARGS | METH_KEYWORDS },
+    { "free" , (PyCFunction) yaspyVarFree, METH_NOARGS },
     { NULL }
 };
 
@@ -78,9 +172,35 @@ PyTypeObject anchorPyTypeVar = {
     .tp_dealloc = (destructor)anpVarFree,
     .tp_repr = (reprfunc)anpVarRepr,
     .tp_flags = Py_TPFLAGS_DEFAULT,
-    .tp_getset = anpCalcMembers};
+    .tp_methods = anpVarMethods,
+    .tp_getset = anpCalcMembers
+};
 
-static PyTypeObject * anpPyTypeDecimal;
+
+static PyTypeObject * anpPyTypeJsonDumps;
+static PyTypeObject * anpPyTypeJsonLoads;
+
+YapiResult anpInitJson()
+{
+    PyObject *module;
+
+    module = PyImport_ImportModule("json");
+    if (module == NULL) {
+        return YAPI_ERROR;
+    }
+    anpPyTypeJsonDumps = (PyTypeObject*) PyObject_GetAttrString(module, "dumps");
+    if (anpPyTypeJsonDumps == NULL) {
+        Py_DECREF(module);
+        return YAPI_ERROR;
+    }
+    anpPyTypeJsonLoads = (PyTypeObject*) PyObject_GetAttrString(module, "loads");
+    if (anpPyTypeJsonLoads == NULL) {
+        Py_DECREF(module);
+        return YAPI_ERROR;
+    }
+    Py_DECREF(module);
+    return YAPI_SUCCESS;
+}
 
 YapiResult anpInitDecimal()
 {
@@ -92,6 +212,8 @@ YapiResult anpInitDecimal()
     }
     anpPyTypeDate = PyDateTimeAPI->DateType;
     anpPyTypeDateTime = PyDateTimeAPI->DateTimeType;
+    anpPyTypeTime = PyDateTimeAPI->TimeType;
+    anpPyTypeTimeDelta = PyDateTimeAPI->DeltaType;
 
     module = PyImport_ImportModule("decimal");
     if (module == NULL) {
@@ -150,8 +272,9 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
     var->isArray = assist->isArray;
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
+    var->isLobTemporary = false;
     if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_NUMBER_FLOAT || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
-        type == YAPI_TYPE_YM_INTERVAL) {
+        type == YAPI_TYPE_YM_INTERVAL || type == YAPI_TYPE_JSON) {
         var->transType = YAPI_TYPE_VARCHAR;
     } else {
         var->transType = type;
@@ -185,6 +308,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
                 if (yapiLobCreateTemporary((YapiConnect*)var->connection->hConn, loc) != YAPI_SUCCESS) {
                     return (AnpVar*)anpRaiseAndReturnNullException();
                 }
+                var->isLobTemporary = true;
             }
             memcpy(var->data + i * sizeof(YapiLobLocator*), &loc, sizeof(YapiLobLocator*));
         }
@@ -347,8 +471,28 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_BLOB:
         case YAPI_TYPE_NCLOB:
-            result = anpGetLobData(hConn, type, *((YapiLobLocator**)data));
+            result = anpGetLobData(hConn, type, (char*)*((YapiLobLocator**)data));
             break;
+        case YAPI_TYPE_JSON: {
+            PyObject* jsonStr = PyUnicode_FromString(data);
+            PyObject* args = Py_BuildValue("(O)", jsonStr);
+            if (!args) {
+                Py_DECREF(jsonStr);
+                result = anpRaiseExceptionFromString(anpProgrammingErrorException, "prepare json loads args failed");
+                break;
+            }
+            result = PyObject_CallObject((PyObject*)anpPyTypeJsonLoads, args);
+            if (!result) {
+                Py_DECREF(jsonStr);
+                Py_DECREF(args);
+                PyErr_Print();
+                result = anpRaiseExceptionFromString(anpProgrammingErrorException, "json loads failed");
+                break;
+            }
+            Py_DECREF(jsonStr);
+            Py_DECREF(args);
+            break;
+        }
         default:
             snprintf(message, 120, "not support type %d", type);
             result = anpRaiseExceptionFromString(anpNotSupportedException, message);
@@ -382,21 +526,6 @@ int anpBindVar(AnpVar* var, AnpCursor* cursor, PyObject* name, uint32_t pos)
             return YAPI_ERROR;
         }
     }
-
-    // if (anpVarIsLobType(var)) {
-    //     if (name) {
-    //         if (yapiBindParameterByName(cursor->hStmt, (char*)nameStr, var->bindDir, var->dbType, &var->data, var->size,
-    //                                     var->bufferSize, var->indicator) != YAPI_SUCCESS) {
-    //             return anpRaiseAndReturnIntException();
-    //         }
-    //     } else {
-    //         if (yapiBindParameter(cursor->hStmt, pos, var->bindDir, var->dbType, &var->data, var->size, var->bufferSize,
-    //                               var->indicator) != YAPI_SUCCESS) {
-    //             return anpRaiseAndReturnIntException();
-    //         }
-    //     }
-    //     return 0;
-    // }
 
     uint32_t bindSize = var->size;
     if ((var->elements > 1) && (var->dataOffset > 0)) {
@@ -487,6 +616,32 @@ static int anpVarSetPyDelta(AnpVar* var, uint32_t arrayPos, PyObject* value)
     return 0;
 }
 
+static const char* anpVarGetJsonStringAndSize(PyObject* value, Py_ssize_t* size)
+{
+    PyObject* args = Py_BuildValue("(O)", value);
+    if (!args) {
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "prepare json dumps args failed");
+        return NULL;
+    }
+    // this ref count should decreased by caller
+    PyObject* jsonStr = PyObject_CallObject((PyObject*)anpPyTypeJsonDumps, args);
+    if (!jsonStr) {
+        Py_DECREF(args);
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "json dumps failed");
+        return NULL;
+    }
+    Py_ssize_t  enCodeStrSize = 0;
+    const char* bindStr = PyUnicode_AsUTF8AndSize(jsonStr, &enCodeStrSize);
+    if (bindStr == NULL) {
+        Py_DECREF(args);
+        Py_DECREF(jsonStr);
+        return NULL;
+    }
+    *size = enCodeStrSize;
+    Py_DECREF(args);
+    return bindStr;
+}
+
 int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject* value)
 {
     if (value == Py_None){
@@ -537,7 +692,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     if (PyBytes_Check(value)) {
         if (anpVarIsLobType(var)) {
              if (yapiLobWrite(hConn, *(YapiLobLocator**)(var->data + var->dataOffset), NULL, 
-                (uint8_t*)value, (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS) {
+                (uint8_t*)PyBytes_AS_STRING(value), (int)PyBytes_GET_SIZE(value)) != YAPI_SUCCESS) {
                 return -1;
              }
              var->indicator[arrayPos] = (int32_t)PyBytes_GET_SIZE(value);
@@ -565,19 +720,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
     
     if (PyLong_Check(value)) {
-        if (var->dbType == YAPI_TYPE_BIGINT) {
-            int64_t* iv = (int64_t*)var->data;
-            int64_t  bindValue = PyLong_AsLongLong(value);
-            PyObject* pyError = PyErr_Occurred();
-            if ((bindValue == -1L) && (pyError != NULL)) {
-                PyErr_SetString(pyError, "fail to get long long value from PyObject");
-                return -1;
-            }
-
-            iv[arrayPos] = bindValue;
-            var->indicator[arrayPos] = (int32_t)sizeof(int64_t);
-            return 0;
-        } else if (var->dbType == YAPI_TYPE_VARCHAR) {
+        if (var->dbType == YAPI_TYPE_VARCHAR) {
             Py_ssize_t  enCodeStrSize = 0;
             PyObject*   numberStr = PyObject_Str(value);
             const char* bindStr = PyUnicode_AsUTF8AndSize(numberStr, &enCodeStrSize);
@@ -686,6 +829,36 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         return anpVarSetPyDelta(var, arrayPos, value);
     }
 
+    if (PyList_Check(value) || PyDict_Check(value)) {
+        Py_ssize_t enCodeStrSize = 0;
+        const char* bindStr = anpVarGetJsonStringAndSize(value, &enCodeStrSize);
+        if (bindStr == NULL) {
+            return -1;
+        }
+
+        if (anpVarIsLobType(var)) {
+            if (yapiLobWrite(hConn, *(YapiLobLocator**)(var->data + var->dataOffset), NULL, (uint8_t*)bindStr,
+                             (uint64_t)enCodeStrSize) != YAPI_SUCCESS) {
+                return -1;
+            }
+            var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += sizeof(YapiLobLocator*);
+        } else {
+            uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+            if (costSize > var->size) {
+                if (adjustAnpVarBuffSize(var, costSize) < 0) {
+                    return -1;
+                }
+            }
+
+            strcpy(var->data + var->dataOffset, bindStr);
+            var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += costSize;
+            var->data[var->dataOffset - 1] = '\0';
+        }
+        return 0;
+    }
+
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
     return -1;
 }
@@ -757,6 +930,15 @@ int anpGetSize(PyObject * value)
         return sizeof(YapiDSInterval);
     }
 
+    if (PyList_Check(value) || PyDict_Check(value)) {
+        Py_ssize_t enCodeStrSize = 0;
+        const char* result = anpVarGetJsonStringAndSize(value, &enCodeStrSize);
+        if (!result) {
+            return -1;
+        }
+        return (int)(enCodeStrSize + 1);
+    }
+
     return 0;
 }
 
@@ -809,6 +991,10 @@ YapiType anpGetType(PyObject * value)
 
     if (PyDelta_Check(value)) {
         return YAPI_TYPE_DS_INTERVAL;
+    }
+
+    if (PyList_Check(value) || PyDict_Check(value)) {
+        return YAPI_TYPE_VARCHAR;
     }
 
     return 0;

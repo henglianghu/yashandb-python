@@ -1,10 +1,26 @@
 import os
+import platform
 import sys
 import sysconfig
 from setuptools import setup, Extension
 
+def get_project_path():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_version():
+    if platform.system() == 'Windows':
+        null_path = 'nul'
+    else:
+        null_path = '/dev/null'
+
+    os.chdir(get_project_path())
+    describe = "".join(os.popen("git describe --tags --abbrev=0 2>{}".format(null_path)).readlines()).strip()
+    return describe if describe else "unknow"
+
+
 #define the version
-BUILD_VERSION = "1.0.0"
+BUILD_VERSION = get_version()
 _DEBUG = False
 _DEBUG_LEVEL = 0
 
