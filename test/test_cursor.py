@@ -324,12 +324,14 @@ class TestCase(test_base.TestBaseCase):
         self.connection.commit()
         read(cursor, name)
 
-        # cursor.execute(
-        #     f"create or replace procedure proc3 (recount out number) is begin select count(*) into recount from {name}; commit; end;"
-        # )
-        # recount = cursor.var(int)
-        # cursor.callproc("proc3", [recount])
-        # print(recount.getvalue())
+        cursor.execute(
+            f"create or replace procedure proc3 (recount out number) is begin select count(*) into recount from {name}; commit; end;"
+        )
+        recount = cursor.var(int)
+        cursor.callproc("proc3", [recount])
+        print(recount.values)
+        self.assertEqual(recount.values, [2])
+        self.assertEqual(recount.getvalue(), 2)
 
 if __name__ == "__main__":
     test_base.run_test_cases()

@@ -36,10 +36,18 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("create table test_bind_over(c1 int , c2 varchar(10))")
         try:
             cursor.execute("insert into test_bind_over values(:1, :2)", (1, 2, 3))
+            self.assertFail("not go here")
         except Exception as e:
             error = str(e)
-            expectMsg = "YAS-00212 index 3 is out of [1, 2]"
-            self.assertEqual(error, expectMsg)
+            if "too many bind parameters" not in error:
+                raise Exception("FAILED")
+        try:
+            cursor.execute("insert into test_bind_over values(:1, ':2')", (1, 2))
+            self.assertFail("not go here")
+        except Exception as e:
+            error = str(e)
+            if "too many bind parameters" not in error:
+                raise Exception("FAILED")
         cursor.execute("drop table if exists test_bind_over")
 
     def test_bind_param_by_name(self):

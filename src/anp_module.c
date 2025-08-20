@@ -4,13 +4,10 @@
 #include "anp_connection.h"
 #include "anp_cursor.h"
 #include "anp_var.h"
+#include "anp_api_type.h"
 
-extern PyTypeObject *anpPyTypeDate;
-extern PyTypeObject *anpPyTypeDateTime;
 
 YapiEnv* anpEnv = NULL;
-
-yaspyApiType *yaspyApiTypeInteger = NULL;
 
 
 #define YASPY_MAKE_TYPE_READY(type) \
@@ -24,7 +21,7 @@ yaspyApiType *yaspyApiTypeInteger = NULL;
         return NULL;
 
 
-static int yaspyModuleAddApiType(PyObject *module, const char *name, YapiType defaultDbType, yaspyApiType **apiType)
+int yaspyModuleAddApiType(PyObject *module, const char *name, YapiType defaultDbType, yaspyApiType **apiType)
 {
     yaspyApiType *tempApiType;
 
@@ -78,16 +75,22 @@ PyInit_yaspy(void)
         return NULL;
     }
 
+    if (anpInitJson() != YAPI_SUCCESS) {
+        return NULL;
+    }
+
     YASPY_MAKE_TYPE_READY(&yasPyTypeApiType);
 
     module = PyModule_Create(&yaspy_module);
 
     YASPY_ADD_TYPE_OBJECT("Date", anpPyTypeDate);
     YASPY_ADD_TYPE_OBJECT("Timestamp", anpPyTypeDateTime);
+    YASPY_ADD_TYPE_OBJECT("Time", anpPyTypeTime);
+    YASPY_ADD_TYPE_OBJECT("Timedelta", anpPyTypeTimeDelta);
 
     YASPY_ADD_TYPE_OBJECT("ApiType", &yasPyTypeApiType);
 
-    if (yaspyModuleAddApiType(module, "INTEGER", YAPI_TYPE_INTEGER, &yaspyApiTypeInteger) < 0) {
+    if (anpRegisterApiType(module) != YAPI_SUCCESS) {
         return NULL;
     }
 

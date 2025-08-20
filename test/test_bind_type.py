@@ -203,6 +203,7 @@ class TestCase(test_base.TestBaseCase):
         cursor = self.connection.cursor()
         cursor.execute("drop table if exists tb_python_ydbrd_6583_sit_08_1")
         cursor.execute("create table tb_python_ydbrd_6583_sit_08_1(id int, c1 json,c2 json) organization heap")
+        # 插入数据
         cursor.execute(
             "insert into tb_python_ydbrd_6583_sit_08_1 values(1, '{\"a\":1, \"b\":1}', '{\"a\":1, \"b\":1}')")
         cursor.execute(
@@ -211,12 +212,46 @@ class TestCase(test_base.TestBaseCase):
             "insert into tb_python_ydbrd_6583_sit_08_1 values(3, '{\"a\":3, \"b\":3}', '{\"a\":3, \"b\":3}')")
         cursor.execute(
             "insert into tb_python_ydbrd_6583_sit_08_1 values(4, '{\"a\":4, \"b\":4}', '{\"a\":4, \"b\":4}')")
-        try:
-            cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 order by id")
-            self.assertFail("test json")
-        except Exception as e:
-            if 'unsupported binding type' not in str(e):
-                raise Exception("FAILED")
+        cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 order by id")
+        result = cursor.fetchall()
+        self.assertEqual(
+            result,
+            [
+                (1, {"a": 1, "b": 1}, {"a": 1, "b": 1}),
+                (2, {"a": 2, "b": 2}, {"a": 2, "b": 2}),
+                (3, {"a": 3, "b": 3}, {"a": 3, "b": 3}),
+                (4, {"a": 4, "b": 4}, {"a": 4, "b": 4}),
+            ],
+        )
+        # 绑定参数插入
+        # 1. 通过str插入
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(5, ?, ?)", ('{\"a\":5, \"b\":5}', '{\"a\":5, \"b\":5}'))
+        cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 where id = 5")
+        result = cursor.fetchall()
+        self.assertEqual(result, [(5, {"a": 5, "b": 5}, {"a": 5, "b": 5})])
+        # 2. 通过dict插入
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(6, ?, ?)", ({"a": 6, "b": 6}, {"a": 6, "b": 6}))
+        cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 where id = 6")
+        result = cursor.fetchall()
+        self.assertEqual(result, [(6, {"a": 6, "b": 6}, {"a": 6, "b": 6})])
+        # 3. 通过list插入
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(7, ?, ?)",
+            ([{"a": 7, "b": 7}, {"c": 7, "d": 7}], [{"a": 7, "b": 7}, {"c": 7, "d": 7}]),
+        )
+        cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 where id = 7")
+        result = cursor.fetchall()
+        self.assertEqual(result, [(7, [{"a": 7, "b": 7}, {"c": 7, "d": 7}], [{"a": 7, "b": 7}, {"c": 7, "d": 7}])])
+        # 4. 插入大json对象
+        cursor.execute(
+            "insert into tb_python_ydbrd_6583_sit_08_1 values(8, ?, ?)",
+            ({"data": "test8" * 10000, "version": "v1"}, {"data": "test8" * 10000, "version": "v1"}),
+        )
+        cursor.execute("select * from tb_python_ydbrd_6583_sit_08_1 where id = 8")
+        result = cursor.fetchall()
+        self.assertEqual(result, [(8, {"data": "test8" * 10000, "version": "v1"}, {"data": "test8" * 10000, "version": "v1"})])
         cursor.execute("drop table if exists tb_python_ydbrd_6583_sit_08_1")
 
     def test_fetch_clob_gbk(self):
