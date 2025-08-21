@@ -875,7 +875,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
         Py_INCREF(cursor);
         return (PyObject*)cursor;
     }
-    return anpRaiseAndReturnNullException();
+    return NULL;
 }
 
 static PyObject* anpCursorClose(AnpCursor* cursor, PyObject* args)
