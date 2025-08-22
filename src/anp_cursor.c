@@ -831,6 +831,7 @@ static PyObject* anpCursorExecute(AnpCursor* cursor, PyObject* args, PyObject* k
 
     resetBindAnpVars(cursor);
     if (execArgs && anpCursorSetBindVariables(cursor, execArgs, 1, 0) < 0) {
+        cursor->isFail = 1;
         return PyErr_Occurred() ? NULL : anpRaiseAndReturnNullException();
     }
 
@@ -1057,7 +1058,8 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
         }
         
         if (anpCursorSetBindVariables(cursor, rowParameter, paramRowCnt, i) < 0) {
-            Py_RETURN_NONE;
+            cursor->isFail = 1;
+            return PyErr_Occurred() ? NULL : anpRaiseAndReturnNullException();
         }
     }
 
