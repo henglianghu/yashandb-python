@@ -8,6 +8,7 @@
 typedef struct {
     PyObject_HEAD
     YapiConnect *hConn;
+    YapiConnectPool *hConnPool;
     PyObject *username;
     PyObject *dsn;
 
@@ -15,7 +16,9 @@ typedef struct {
 } AnpConnection;
 
 YapiResult anpRegistConnection(PyObject* module);
-bool anpConnectionIsConnected(AnpConnection *conn);
+int        anpGetModule(PyTypeObject* type, PyObject** module, PyObject** name);
+bool       anpConnectionIsConnected(AnpConnection* conn);
+PyObject*  anpNewConnection(PyTypeObject* type, PyObject* args, PyObject* keywordArgs);
 
 extern PyTypeObject anchorPyTypeConnection;
 

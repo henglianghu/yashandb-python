@@ -3,8 +3,7 @@
 #include "anp_cursor.h"
 #include "structmember.h"
 
-static PyObject *anpNewConnection(PyTypeObject *type, PyObject *args,
-                                  PyObject *keywordArgs)
+PyObject* anpNewConnection(PyTypeObject* type, PyObject* args, PyObject* keywordArgs)
 {
     return type->tp_alloc(type, 0);
 }
@@ -12,9 +11,15 @@ static PyObject *anpNewConnection(PyTypeObject *type, PyObject *args,
 static void anpFreeConnection(AnpConnection *conn)
 {
     if (conn->hConn != NULL) {
-        Py_BEGIN_ALLOW_THREADS
+        if (conn->hConnPool != NULL) {
+            Py_BEGIN_ALLOW_THREADS
+            yapiConnectionGiveBack(conn->hConn);
+            Py_END_ALLOW_THREADS
+        } else {
+            Py_BEGIN_ALLOW_THREADS
             yapiReleaseConn(conn->hConn);
-        Py_END_ALLOW_THREADS
+            Py_END_ALLOW_THREADS
+        }
         conn->hConn = NULL;
     }
     Py_CLEAR(conn->username);
@@ -94,9 +99,15 @@ static PyObject *anpConnectionClose(AnpConnection *conn, PyObject *args)
     }
 
     if (conn->hConn != NULL) {
-        Py_BEGIN_ALLOW_THREADS
+        if (conn->hConnPool != NULL) {
+            Py_BEGIN_ALLOW_THREADS
+            yapiConnectionGiveBack(conn->hConn);
+            Py_END_ALLOW_THREADS
+        } else {
+            Py_BEGIN_ALLOW_THREADS
             yapiDisconnect(conn->hConn);
-        Py_END_ALLOW_THREADS
+            Py_END_ALLOW_THREADS
+        }
         conn->hConn = NULL;
     }
     Py_RETURN_NONE;
