@@ -4,8 +4,8 @@
 #include "anp_connection.h"
 #include "anp_cursor.h"
 #include "anp_var.h"
+#include "anp_session_pool.h"
 #include "anp_api_type.h"
-
 
 YapiEnv* anpEnv = NULL;
 
@@ -80,6 +80,7 @@ PyInit_yaspy(void)
     }
 
     YASPY_MAKE_TYPE_READY(&yasPyTypeApiType);
+    YASPY_MAKE_TYPE_READY(&anchorPyTypeSessionPool);
 
     module = PyModule_Create(&yaspy_module);
 
@@ -89,6 +90,7 @@ PyInit_yaspy(void)
     YASPY_ADD_TYPE_OBJECT("Timedelta", anpPyTypeTimeDelta);
 
     YASPY_ADD_TYPE_OBJECT("ApiType", &yasPyTypeApiType);
+    YASPY_ADD_TYPE_OBJECT("SessionPool", &anchorPyTypeSessionPool);
 
     if (anpRegisterApiType(module) != YAPI_SUCCESS) {
         return NULL;
