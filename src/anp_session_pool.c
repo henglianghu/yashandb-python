@@ -74,6 +74,12 @@ static int anpSessionPoolInit(AnpSessionPool* pool, PyObject* args, PyObject* ke
     if (res != YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
+
+    uint32_t charset = YAPI_CHARSET_UTF8;
+    if (yapiSetEnvAttr(anpEnv, YAPI_ATTR_CHARSET_CODE, &charset, sizeof(uint32_t)) != YAPI_SUCCESS) {
+        return anpRaiseAndReturnIntException();
+    }
+
     return 0;
 }
 
