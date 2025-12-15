@@ -337,37 +337,56 @@ bool anpCheckVar(PyObject* object)
 static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
 {
     YapiLobLocator* loc = (YapiLobLocator*)data;
-    uint64_t length;
-    yapiLobGetLength(hConn, loc, &length);
-    if (length == 0) {
-        Py_RETURN_NONE;
-    }
-    
-    if (type == YAPI_TYPE_CLOB || type == YAPI_TYPE_NCLOB) {
-        length = length * 4;
+    char readBuf[LOB_BUFFER_SIZE];
+    uint64_t length = LOB_BUFFER_SIZE;
+    PyObject* byteArray = PyByteArray_FromStringAndSize(NULL, 0);
+    if (!byteArray) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to create bytearray");
+        return NULL;
     }
 
-    char* readBuf = PyMem_Malloc(length + 1);
-    if (readBuf == NULL) {
-        return (PyObject*)PyErr_NoMemory();
+    while (length > 0) {
+        if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf,
+                        LOB_BUFFER_SIZE) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnNullException();
+        }
+        uint64_t origSize = PyByteArray_Size(byteArray);
+        uint64_t newSize = origSize + length;
+
+        if (PyByteArray_Resize(byteArray, newSize) < 0) {
+            Py_DECREF(byteArray);
+            PyErr_SetString(PyExc_RuntimeError, "Failed to resize bytearray");
+            return NULL;
+        }
+
+        char* byteArrayBuf = PyByteArray_AsString(byteArray);
+        if (!byteArrayBuf) {
+            Py_DECREF(byteArray);
+            PyErr_SetString(PyExc_RuntimeError, "Failed to get bytearray buffer");
+            return NULL;
+        }
+
+        memcpy(byteArrayBuf + origSize, readBuf, length);
     }
-    
-    if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf, length) != YAPI_SUCCESS) {
-        PyMem_Free(readBuf);
-        readBuf = NULL;
-        return anpRaiseAndReturnNullException();
-    }
-    
+
     PyObject* var = NULL;
+    char* dataBuf = PyByteArray_AsString(byteArray);
+    size_t size = PyByteArray_Size(byteArray);
     if (type == YAPI_TYPE_BLOB) {
-        var = PyBytes_FromStringAndSize(readBuf, (Py_ssize_t)length);
+        var = PyBytes_FromStringAndSize(dataBuf, size);
+        Py_DECREF(byteArray);
     } else {
-        readBuf[length] = '\0';
-        var =  PyUnicode_FromString((char*)readBuf);
+        var = PyUnicode_FromString(dataBuf);
+        Py_DECREF(byteArray);
+        if (!var) {
+            PyErr_Clear();
+            PyObject* bytesObj = PyBytes_FromStringAndSize(data, size);
+            PyObject* reprStr = PyObject_Repr(bytesObj);
+            Py_DECREF(bytesObj);
+            return reprStr;
+        }
     }
 
-    PyMem_Free(readBuf);
-    readBuf = NULL;
     return var;
 }
 
