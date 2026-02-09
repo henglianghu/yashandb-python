@@ -22,6 +22,12 @@ typedef struct StAnpVar {
     YapiType   transType;
     YapiParamDirection bindDir;
     bool isLobTemporary;
+    // Union for type-specific data
+    union {
+        YapiVectorFormat vectorFormat;  // For VECTOR type
+        // Other type-specific fields can be added here
+        PyObject* lobCacheObj;
+    } typeData;
 } AnpVar;
 
 typedef struct StVarAssist
@@ -36,6 +42,7 @@ typedef struct StVarAssist
 YapiResult anpRegisteVarObject(PyObject* module);
 YapiResult anpInitDecimal();
 YapiResult anpInitJson();
+YapiResult anpInitArray();
 
 bool   anpCheckVar(PyObject* object);
 AnpVar*   anpNewVar(AnpCursor* cursor, VarAssist *assist);

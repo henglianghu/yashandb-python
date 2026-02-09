@@ -1,5 +1,6 @@
 from decimal import Decimal
 import datetime
+import array
 
 import test_base
 import yaspy
@@ -310,6 +311,23 @@ class TestCase(test_base.TestBaseCase):
             err = str(e)
             if "not a valid number" not in err:
                 raise Exception("FAILED")
+
+    def test_bind_vector(self):
+        cursor = self.connection.cursor()
+        cursor.execute("drop table if exists tab_test_vector_py_001")
+        cursor.execute("create table tab_test_vector_py_001(c1 vector(3, float32), c2 vector(3, float64))")
+        self.assertEqual(0, self.cursor.rowcount)
+        vec_c1 = array.array("f", [1.625, 1.5, 1.0])
+        vec_c2 = array.array("d", [11.25, 11.75, 11.5])
+        cursor.execute(
+            "insert into tab_test_vector_py_001 values (:1, :2)",
+            [vec_c1, vec_c2]
+        )
+        cursor.execute("select * from tab_test_vector_py_001")
+        for row in cursor:
+            self.assertAlmostEqual(row[0], vec_c1)
+            self.assertAlmostEqual(row[1], vec_c2)
+        # (array("f", [1.625, 1.5, 1.0]), array("d", [11.25, 11.75, 11.5])
 
 if __name__ == "__main__":
     test_base.run_test_cases()

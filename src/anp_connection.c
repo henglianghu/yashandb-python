@@ -81,6 +81,7 @@ static int anpConnectionInit(AnpConnection *conn, PyObject *args,
     Py_END_ALLOW_THREADS
 
     if (res != YAPI_SUCCESS) {
+        conn->hConn = NULL;
         return anpRaiseAndReturnIntException();
     }
 

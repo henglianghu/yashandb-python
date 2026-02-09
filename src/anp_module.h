@@ -15,6 +15,7 @@ extern PyTypeObject *anpPyTypeDateTime;
 extern PyTypeObject *anpPyTypeTime;
 extern PyTypeObject *anpPyTypeTimeDelta;
 extern PyTypeObject *anpPyTypeDecimal;
+extern PyTypeObject *anpPyTypeArray;
 
 typedef struct yaspyApiType yaspyApiType;
 
