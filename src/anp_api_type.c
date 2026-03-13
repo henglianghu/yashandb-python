@@ -25,6 +25,7 @@ yaspyApiType *yaspyApiTypeYeardelta = NULL;
 yaspyApiType *yaspyApiTypeBlob = NULL;
 yaspyApiType *yaspyApiTypeClob = NULL;
 yaspyApiType *yaspyApiTypeNclob = NULL;
+yaspyApiType *yaspyApiTypeVector = NULL;
 
 static void yaspyApiTypeFree(yaspyApiType *apiType)
 {
@@ -108,6 +109,9 @@ YapiResult anpRegisterApiType(PyObject *module)
         return YAPI_ERROR;
     }
     if (yaspyModuleAddApiType(module, "NCLOB", YAPI_TYPE_NCLOB, &yaspyApiTypeNclob) < 0) {
+        return YAPI_ERROR;
+    }
+    if (yaspyModuleAddApiType(module, "VECTOR", YAPI_TYPE_VECTOR, &yaspyApiTypeVector) < 0) {
         return YAPI_ERROR;
     }
     return YAPI_SUCCESS;

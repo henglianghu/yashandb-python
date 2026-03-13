@@ -6,6 +6,7 @@
 #include "anp_var.h"
 #include "anp_session_pool.h"
 #include "anp_api_type.h"
+#include "anp_fetchinfo.h"
 
 YapiEnv* anpEnv = NULL;
 
@@ -79,6 +80,10 @@ PyInit_yaspy(void)
         return NULL;
     }
 
+    if (anpInitArray() != YAPI_SUCCESS) {
+        return NULL;
+    }
+
     YASPY_MAKE_TYPE_READY(&yasPyTypeApiType);
     YASPY_MAKE_TYPE_READY(&anchorPyTypeSessionPool);
 
@@ -117,6 +122,9 @@ PyInit_yaspy(void)
         return NULL;
     }
     if (anpRegisteVarObject(module)!= YAPI_SUCCESS) {
+        return NULL;
+    }
+    if (anpRegisterFetchInfo(module) != YAPI_SUCCESS) {
         return NULL;
     }
 

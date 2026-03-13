@@ -3,6 +3,7 @@
 #include "anp_exception.h"
 #include "anp_var.h"
 #include "anp_api_type.h"
+#include "anp_fetchinfo.h"
 
 
 static int anpCursorInit(AnpCursor* cursor, PyObject* arguments, PyObject* keywordArgs)
@@ -107,6 +108,92 @@ uint32_t anpGetDisplaySize(YapiColumnDesc* desc)
     return displaySize;
 }
 
+static void anpCursorItemDescriptionSetVectorAttrs(AnpCursor* cursor, PyObject* kwargs, YapiColumnDesc* desc, uint32_t pos)
+{
+    // For VECTOR type, set size, precision, scale all to None to align with Oracle
+    PyObject* internal_size_obj = Py_None;
+    Py_INCREF(Py_None);
+    PyObject* precision_obj = Py_None;
+    Py_INCREF(Py_None);
+    PyObject* scale_obj = Py_None;
+    Py_INCREF(Py_None);
+    
+    // For VECTOR type, also set vector_dimension and vector_format
+    // Get column attributes for VECTOR type
+    uint16_t dimension = 0;
+    YapiVectorFormat format = YAPI_VECTOR_FORMAT_FLEX;
+    
+    // Try to get dimension from column attribute
+    yapiColAttribute(cursor->hStmt, pos, YAPI_COL_ATTR_VECTOR_DIMENSION, &dimension, sizeof(dimension), NULL);
+    
+    // Try to get format from column attribute
+    yapiColAttribute(cursor->hStmt, pos, YAPI_COL_ATTR_VECTOR_DATA_FORMAT, &format, sizeof(format), NULL);
+    
+    // Set vector_dimension
+    PyObject* vector_dimension_obj = PyLong_FromLong(dimension);
+    if (vector_dimension_obj != NULL) {
+        PyDict_SetItemString(kwargs, "vector_dimension", vector_dimension_obj);
+        Py_DECREF(vector_dimension_obj);
+    }
+    
+    // Set vector_format
+    PyObject* vector_format_obj = anpGetVectorFormatObject(format);
+    if (vector_format_obj != NULL) {
+        PyDict_SetItemString(kwargs, "vector_format", vector_format_obj);
+        Py_DECREF(vector_format_obj);
+    }
+    
+    // Set internal_size, precision, scale
+    PyDict_SetItemString(kwargs, "internal_size", internal_size_obj);
+    PyDict_SetItemString(kwargs, "precision", precision_obj);
+    PyDict_SetItemString(kwargs, "scale", scale_obj);
+}
+
+static void anpCursorItemDescriptionSetRegularAttrs(PyObject* kwargs, YapiColumnDesc* desc)
+{
+    // For non-VECTOR types, set regular attributes
+    PyObject* internal_size_obj;
+    if (desc->size == 0) {
+        internal_size_obj = Py_None;
+        Py_INCREF(Py_None);
+    } else {
+        internal_size_obj = PyLong_FromLong(desc->size);
+    }
+    PyDict_SetItemString(kwargs, "internal_size", internal_size_obj);
+    Py_DECREF(internal_size_obj);
+    
+    PyObject* precision_obj;
+    if (desc->precision != 255) {
+        precision_obj = PyLong_FromLong(desc->precision);
+    } else {
+        precision_obj = Py_None;
+        Py_INCREF(Py_None);
+    }
+    PyDict_SetItemString(kwargs, "precision", precision_obj);
+    Py_DECREF(precision_obj);
+    
+    PyObject* scale_obj;
+    if (desc->scale != -128) {
+        scale_obj = PyLong_FromLong(desc->scale);
+    } else {
+        scale_obj = Py_None;
+        Py_INCREF(Py_None);
+    }
+    PyDict_SetItemString(kwargs, "scale", scale_obj);
+    Py_DECREF(scale_obj);
+    
+    // For non-VECTOR types, set vector_dimension and vector_format to None
+    PyObject* vector_dimension_obj = Py_None;
+    Py_INCREF(Py_None);
+    PyDict_SetItemString(kwargs, "vector_dimension", vector_dimension_obj);
+    Py_DECREF(vector_dimension_obj);
+    
+    PyObject* vector_format_obj = Py_None;
+    Py_INCREF(Py_None);
+    PyDict_SetItemString(kwargs, "vector_format", vector_format_obj);
+    Py_DECREF(vector_format_obj);
+}
+
 static PyObject* anpCursorItemDescription(AnpCursor* cursor, uint32_t pos)
 {
     YapiColumnDesc desc;
@@ -114,45 +201,80 @@ static PyObject* anpCursorItemDescription(AnpCursor* cursor, uint32_t pos)
         return NULL;
     }
 
-    PyObject* tuple = PyTuple_New(7);
-    if (tuple == NULL) {
+    // Create arguments for FetchInfo constructor
+    PyObject* args = PyTuple_New(0);
+    if (args == NULL) {
         return NULL;
     }
+    
+    PyObject* kwargs = PyDict_New();
+    if (kwargs == NULL) {
+        Py_DECREF(args);
+        return NULL;
+    }
+    
+    // name
+    PyObject* name_obj = PyUnicode_Decode(desc.name, strlen(desc.name), NULL, NULL);
+    if (name_obj == NULL) {
+        Py_DECREF(args);
+        Py_DECREF(kwargs);
+        return NULL;
+    }
+    PyDict_SetItemString(kwargs, "name", name_obj);
+    Py_DECREF(name_obj);
+    
+    // type
+    PyObject* type_obj = PyLong_FromLong(desc.type);
+    if (type_obj == NULL) {
+        Py_DECREF(args);
+        Py_DECREF(kwargs);
+        return NULL;
+    }
+    PyDict_SetItemString(kwargs, "type", type_obj);
+    Py_DECREF(type_obj);
+    
+    // display_size
     int itemDisplaySize = anpGetDisplaySize(&desc);
-
-    PyTuple_SET_ITEM(tuple, 0, PyUnicode_Decode(desc.name, strlen(desc.name), NULL, NULL));
-    PyTuple_SET_ITEM(tuple, 1, PyLong_FromLong(desc.type));
+    PyObject* display_size_obj;
     if (itemDisplaySize == 0) {
+        display_size_obj = Py_None;
         Py_INCREF(Py_None);
-        PyTuple_SET_ITEM(tuple, 2, Py_None);
     } else {
-        PyTuple_SET_ITEM(tuple, 2, PyLong_FromLong(itemDisplaySize));
+        display_size_obj = PyLong_FromLong(itemDisplaySize);
+        if (display_size_obj == NULL) {
+            Py_DECREF(args);
+            Py_DECREF(kwargs);
+            return NULL;
+        }
     }
-
-    if (desc.size == 0) {
-        Py_INCREF(Py_None);
-        PyTuple_SET_ITEM(tuple, 3, Py_None);
+    PyDict_SetItemString(kwargs, "display_size", display_size_obj);
+    Py_DECREF(display_size_obj);
+    
+    // Set attributes based on type
+    if (desc.type == YAPI_TYPE_VECTOR) {
+        anpCursorItemDescriptionSetVectorAttrs(cursor, kwargs, &desc, pos);
     } else {
-        PyTuple_SET_ITEM(tuple, 3, PyLong_FromLong(desc.size));
+        anpCursorItemDescriptionSetRegularAttrs(kwargs, &desc);
     }
-
-    if (desc.precision != 255) {
-        PyTuple_SET_ITEM(tuple, 4, PyLong_FromLong(desc.precision));
-    } else {
-        Py_INCREF(Py_None);
-        PyTuple_SET_ITEM(tuple, 4, Py_None);
+    
+    // null_ok
+    PyObject* null_ok_obj = PyLong_FromLong(desc.nullable);
+    if (null_ok_obj == NULL) {
+        Py_DECREF(args);
+        Py_DECREF(kwargs);
+        return NULL;
     }
-
-    if (desc.scale != -128) {
-        PyTuple_SET_ITEM(tuple, 5, PyLong_FromLong(desc.scale));
-    } else {
-        Py_INCREF(Py_None);
-        PyTuple_SET_ITEM(tuple, 5, Py_None);
-    }
-
-    PyTuple_SET_ITEM(tuple, 6, PyLong_FromLong(desc.nullable));
-
-    return tuple;
+    PyDict_SetItemString(kwargs, "null_ok", null_ok_obj);
+    Py_DECREF(null_ok_obj);
+    
+    // Create FetchInfo object
+    PyObject* fetch_info = PyObject_Call((PyObject*)&anchorPyTypeFetchInfo, args, kwargs);
+    
+    // Clean up
+    Py_DECREF(args);
+    Py_DECREF(kwargs);
+    
+    return fetch_info;
 }
 
 static PyObject* anpCursorGetDescription(AnpCursor* cursor, void* unused)
@@ -442,6 +564,9 @@ void anpGetColumnSize(YapiColumnDesc* desc, uint32_t* bindSize, uint32_t maxChar
         case YAPI_TYPE_JSON:
             *bindSize = -1;
             break;
+        case YAPI_TYPE_VECTOR:
+            *bindSize = sizeof(YapiVector*);
+            break;
         default:
             *bindSize = 20;
             break;
@@ -499,7 +624,7 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
             return anpRaiseAndReturnIntException();
         }
 
-        if ((queryInfo.type > YAPI_TYPE_CURSOR) && (queryInfo.type != YAPI_TYPE_NUMBER_FLOAT) && (queryInfo.type != YAPI_TYPE_JSON)) {
+        if ((queryInfo.type > YAPI_TYPE_CURSOR) && (queryInfo.type != YAPI_TYPE_NUMBER_FLOAT) && (queryInfo.type != YAPI_TYPE_JSON) && (queryInfo.type != YAPI_TYPE_VECTOR)) {
             anpRaiseExceptionFromString(anpNotSupportedException, "unsupported binding type");
             return -1;
         }
@@ -510,11 +635,16 @@ static int anpCursorPerformDefine(AnpCursor* cursor, uint32_t numQueryColumns)
         uint32_t size;
         anpGetColumnSize(&queryInfo, &size, maxCharsetRatio);
 
-        VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type, 
+        VarAssist assist = {.numElements = cursor->fetchArraySize, .type = queryInfo.type,
             .size = size, .isArray = false, .bindIn = false};
         AnpVar* var = anpNewVar(cursor, &assist);
         if (var == NULL) {
             return -1;
+        }
+
+        // For VECTOR type, set the vector format from column metadata
+        if (queryInfo.type == YAPI_TYPE_VECTOR) {
+            var->typeData.vectorFormat = (YapiVectorFormat)queryInfo.vector.format;
         }
 
         PyList_SET_ITEM(cursor->fetchVariables, pos, (PyObject*)var);
@@ -608,6 +738,8 @@ int yaspyGetDbTypeFromPyType(PyObject *type, YapiType *dbType)
             *dbType = YAPI_TYPE_DS_INTERVAL;
         } else if (t == &PyList_Type || t == &PyDict_Type) {
             *dbType = YAPI_TYPE_JSON;
+        } else if (t == anpPyTypeArray) {
+            *dbType = YAPI_TYPE_VECTOR;
         } else {
             PyErr_SetString(PyExc_TypeError, "unsupported python type to convert to db type");
             return -1;
@@ -665,6 +797,9 @@ static int getDefaultTypeSize(YapiType type)
             break;
         case YAPI_TYPE_YM_INTERVAL:
             typeSize = 128;
+            break;
+        case YAPI_TYPE_VECTOR:
+            typeSize = sizeof(YapiVector*);
             break;
         default:
             typeSize = -1;
@@ -908,6 +1043,9 @@ static PyObject* anpCursorCreateRow(AnpCursor* cursor, uint32_t pos)
 
     for (i = 0; i < numItems; i++) {
         AnpVar* var = (AnpVar*)PyList_GET_ITEM(cursor->fetchVariables, i);
+        if (anpVarIsLobType(var)) {
+            Py_CLEAR(var->typeData.lobCacheObj);
+        }
         item = anpVarGetSingleValue(var->connection->hConn, var, pos);
         if (item == NULL) {
             Py_DECREF(tuple);

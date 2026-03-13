@@ -1,12 +1,14 @@
 #include "anp_var.h"
 #include "datetime.h"
 #include "anp_exception.h"
+// #include "yacapi.h"
 
 PyTypeObject *anpPyTypeDate;
 PyTypeObject *anpPyTypeDateTime;
 PyTypeObject *anpPyTypeTime;
 PyTypeObject *anpPyTypeTimeDelta;
 PyTypeObject *anpPyTypeDecimal;
+PyTypeObject *anpPyTypeArray;
 
 bool anpVarIsLobType(AnpVar* var) {
     if (var->transType == YAPI_TYPE_CLOB || var->transType == YAPI_TYPE_BLOB || var->transType == YAPI_TYPE_NCLOB ||
@@ -26,6 +28,17 @@ static void anpVarFree(AnpVar *var)
                     (void)anpRaiseAndReturnNullException();
                 }
             }
+            Py_CLEAR(var->typeData.lobCacheObj);
+        } else if (var->dbType == YAPI_TYPE_VECTOR) {
+            // Free YapiVector objects for VECTOR type
+            for (uint32_t i = 0; i < var->elements; i++) {
+                YapiVector* vector = *((YapiVector**)(var->data + i * sizeof(YapiVector*)));
+                if (vector != NULL) {
+                    yapiDescFree2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR);
+                }
+            }
+            // Use memset to set all pointers to NULL to prevent double free
+            memset(var->data, 0, var->bufferSize);
         }
         PyMem_Free(var->data);
     }
@@ -132,17 +145,24 @@ static PyObject* yaspyVarFree(AnpVar* var)
     if (var->data) {
         if (anpVarIsLobType(var)) {
             for (uint32_t i = 0; i < var->elements; i++) {
-                if (var->isLobTemporary &&
-                    yapiLobFreeTemporary(var->connection->hConn,
-                                         *(YapiLobLocator**)(var->data + i * sizeof(YapiLobLocator*))) !=
-                        YAPI_SUCCESS) {
+                YapiLobLocator** loc = (YapiLobLocator**)(var->data + i * sizeof(YapiLobLocator*));
+                if (var->isLobTemporary && loc && yapiLobFreeTemporary(var->connection->hConn, *loc) != YAPI_SUCCESS) {
                     (void)anpRaiseAndReturnIntException();
                 }
-                if (yapiLobDescFree(*(YapiLobLocator**)(var->data + i * sizeof(YapiLobLocator*)), var->transType) !=
-                    YAPI_SUCCESS) {
+                if (yapiLobDescFree(*loc, var->transType) != YAPI_SUCCESS) {
                     (void)anpRaiseAndReturnNullException();
                 }
             }
+        } else if (var->dbType == YAPI_TYPE_VECTOR) {
+            // Free YapiVector objects for VECTOR type
+            for (uint32_t i = 0; i < var->elements; i++) {
+                YapiVector* vector = *((YapiVector**)(var->data + i * sizeof(YapiVector*)));
+                if (vector != NULL) {
+                    yapiDescFree2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR);
+                }
+            }
+            // Use memset to set all pointers to NULL to prevent double free
+            memset(var->data, 0, var->bufferSize);
         }
         PyMem_Free(var->data);
         var->data = NULL;
@@ -227,6 +247,25 @@ YapiResult anpInitDecimal()
     return YAPI_SUCCESS;
 }
 
+YapiResult anpInitArray()
+{
+    PyObject *module;
+
+    module = PyImport_ImportModule("array");
+    if (module == NULL) {
+        return YAPI_ERROR;
+    }
+
+    anpPyTypeArray = (PyTypeObject*) PyObject_GetAttrString(module, "array");
+    Py_DECREF(module);
+
+    if (anpPyTypeArray == NULL) {
+        return YAPI_ERROR;
+    }
+
+    return YAPI_SUCCESS;
+}
+
 YapiResult anpRegisteVarObject(PyObject* module)
 {
     PyType_Ready(&anchorPyTypeVar);
@@ -273,6 +312,7 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
     var->bufferSize = var->size * var->elements;
     var->dbType = type;
     var->isLobTemporary = false;
+    var->typeData.lobCacheObj = NULL;
     if(type == YAPI_TYPE_NUMBER || type == YAPI_TYPE_NUMBER_FLOAT || type == YAPI_TYPE_BIT || type == YAPI_TYPE_ROWID || 
         type == YAPI_TYPE_YM_INTERVAL || type == YAPI_TYPE_JSON) {
         var->transType = YAPI_TYPE_VARCHAR;
@@ -299,6 +339,8 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
             return (AnpVar*)PyErr_NoMemory();
         }
 
+        memset(var->data, 0, var->bufferSize);
+
         YapiLobLocator* loc;
         for (uint32_t i = 0; i < var->elements; i++) {
             if (yapiLobDescAlloc((YapiConnect*)var->connection->hConn, var->transType, (void**)&loc) != YAPI_SUCCESS) {
@@ -311,6 +353,30 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
                 var->isLobTemporary = true;
             }
             memcpy(var->data + i * sizeof(YapiLobLocator*), &loc, sizeof(YapiLobLocator*));
+        }
+    } else if (var->dbType == YAPI_TYPE_VECTOR) {
+        // For VECTOR type, we store pointers to YapiVector objects
+        var->size = sizeof(YapiVector*);
+        var->bufferSize = var->size * var->elements;
+        var->data = PyMem_Malloc(var->bufferSize);
+        if (var->data == NULL) {
+            Py_DECREF(var);
+            return (AnpVar*)PyErr_NoMemory();
+        }
+        
+        memset(var->data, 0, var->bufferSize);
+        // Initialize vector format to a default value
+        var->typeData.vectorFormat = YAPI_VECTOR_FORMAT_FLEX;
+        
+        // Allocate YapiVector objects for each element
+        for (uint32_t i = 0; i < var->elements; i++) {
+            YapiVector* vector = NULL;
+            if (yapiDescAlloc2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR) != YAPI_SUCCESS) {
+                Py_DECREF(var);
+                return (AnpVar*)anpRaiseAndReturnNullException();
+            }
+            // Store the vector pointer in data
+            *((YapiVector**)(var->data + i * sizeof(YapiVector*))) = vector;
         }
     } else {
         var->data = PyMem_Malloc(var->bufferSize);
@@ -346,8 +412,7 @@ static PyObject* anpGetLobData(YapiConnect* hConn, YapiType type, char* data)
     }
 
     while (length > 0) {
-        if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf,
-                        LOB_BUFFER_SIZE) != YAPI_SUCCESS) {
+        if (yapiLobRead(hConn, loc, &length, (uint8_t*)readBuf, LOB_BUFFER_SIZE) != YAPI_SUCCESS) {
             return anpRaiseAndReturnNullException();
         }
         uint64_t origSize = PyByteArray_Size(byteArray);
@@ -405,6 +470,94 @@ static PyObject* anpVarToPyDelta(char* data)
 
     dsSeconds = dsHours * 60 * 60 + dsMinutes * 60 + dsSeconds;
     return PyDelta_FromDSU(dsDays, dsSeconds, dsMicroSecs);
+}
+
+static PyObject* anpVarToPyVector(AnpVar* var, YapiVector* vector)
+{
+    // Get vector info - use size directly from YapiVector
+    uint16_t dim = 0;
+    uint32_t arrayLen = vector->size;
+    
+    // Check if vector format is valid, if not, get it from the vector
+    if (var->typeData.vectorFormat != YAPI_VECTOR_FORMAT_FLOAT32 &&
+        var->typeData.vectorFormat != YAPI_VECTOR_FORMAT_FLOAT64) {
+        // Invalid format, get it from the vector
+        if (yapiVectorGetFormat(vector, &var->typeData.vectorFormat) != YAPI_SUCCESS) {
+            return anpRaiseAndReturnNullException();
+        }
+    }
+    
+    // Allocate buffer for array data
+    uint8_t* arrayBuffer = (uint8_t*)PyMem_Malloc(arrayLen);
+    if (!arrayBuffer) {
+        return PyErr_NoMemory();
+    }
+    
+    // Convert vector to array using the format stored in var
+    if (yapiVectorToArray(vector, var->typeData.vectorFormat, &dim, arrayBuffer, &arrayLen, 0) != YAPI_SUCCESS) {
+        PyMem_Free(arrayBuffer);
+        return anpRaiseAndReturnNullException();
+    }
+    
+    // Create Python array based on format stored in var
+    const char* typecode;
+    switch (var->typeData.vectorFormat) {
+        case YAPI_VECTOR_FORMAT_FLOAT32:
+            typecode = "f";  // float32
+            break;
+        case YAPI_VECTOR_FORMAT_FLOAT64:
+            typecode = "d";  // float64
+            break;
+        default:
+            PyMem_Free(arrayBuffer);
+            return anpRaiseExceptionFromString(anpNotSupportedException, "Unsupported vector format");
+    }
+    
+    // Create array constructor args
+    PyObject* arrayArgs = Py_BuildValue("(s)", typecode);
+    if (!arrayArgs) {
+        PyMem_Free(arrayBuffer);
+        return NULL;
+    }
+    
+    // Create array object
+    PyObject* arrayObj = PyObject_CallObject((PyObject*)anpPyTypeArray, arrayArgs);
+    Py_DECREF(arrayArgs);
+    
+    if (!arrayObj) {
+        PyMem_Free(arrayBuffer);
+        return NULL;
+    }
+    
+    // Set array data from buffer
+    PyObject* fromBytesFunc = PyObject_GetAttrString(arrayObj, "frombytes");
+    if (!fromBytesFunc) {
+        Py_DECREF(arrayObj);
+        PyMem_Free(arrayBuffer);
+        return NULL;
+    }
+    
+    PyObject* bufferBytes = PyBytes_FromStringAndSize((char*)arrayBuffer, arrayLen);
+    if (!bufferBytes) {
+        Py_DECREF(fromBytesFunc);
+        Py_DECREF(arrayObj);
+        PyMem_Free(arrayBuffer);
+        return NULL;
+    }
+    
+    PyObject* callResult = PyObject_CallFunctionObjArgs(fromBytesFunc, bufferBytes, NULL);
+    Py_DECREF(bufferBytes);
+    Py_DECREF(fromBytesFunc);
+    
+    if (!callResult) {
+        Py_DECREF(arrayObj);
+        PyMem_Free(arrayBuffer);
+        return NULL;
+    }
+    
+    Py_DECREF(callResult);
+    PyMem_Free(arrayBuffer);
+    return arrayObj;
 }
 
 static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
@@ -490,7 +643,14 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
         case YAPI_TYPE_CLOB:
         case YAPI_TYPE_BLOB:
         case YAPI_TYPE_NCLOB:
-            result = anpGetLobData(hConn, type, (char*)*((YapiLobLocator**)data));
+            if (var->typeData.lobCacheObj != NULL) {
+                Py_INCREF(var->typeData.lobCacheObj);
+                result = var->typeData.lobCacheObj;
+                break;
+            }
+            var->typeData.lobCacheObj = anpGetLobData(hConn, type, (char*)*((YapiLobLocator**)data));
+            Py_INCREF(var->typeData.lobCacheObj);
+            result = var->typeData.lobCacheObj;
             break;
         case YAPI_TYPE_JSON: {
             PyObject* jsonStr = PyUnicode_FromString(data);
@@ -510,6 +670,11 @@ static PyObject *anpVarToPython(YapiConnect* hConn, AnpVar* var, uint32_t pos)
             }
             Py_DECREF(jsonStr);
             Py_DECREF(args);
+            break;
+        }
+        case YAPI_TYPE_VECTOR: {
+            YapiVector* vector = *((YapiVector**)data);
+            result = anpVarToPyVector(var, vector);
             break;
         }
         default:
@@ -878,6 +1043,79 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         return 0;
     }
 
+    if (PyObject_TypeCheck(value, anpPyTypeArray)) {
+        // For VECTOR type, we need to convert array to YapiVector
+        // Reuse existing vector if it exists
+        YapiVector* vector = *((YapiVector**)(var->data + arrayPos * sizeof(YapiVector*)));
+        if (vector == NULL) {
+            // Allocate new vector if it doesn't exist
+            if (yapiDescAlloc2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR) != YAPI_SUCCESS) {
+                return anpRaiseAndReturnIntException();
+            }
+            // Store the vector pointer in data
+            *((YapiVector**)(var->data + arrayPos * sizeof(YapiVector*))) = vector;
+        }
+        
+        // Get array type code and buffer info
+        PyObject* typecodeObj = PyObject_GetAttrString(value, "typecode");
+        if (!typecodeObj) {
+            return -1;
+        }
+        
+        const char* typecode = PyUnicode_AsUTF8(typecodeObj);
+        Py_DECREF(typecodeObj);
+        
+        if (!typecode) {
+            return -1;
+        }
+        
+        // Determine YapiVectorFormat based on array typecode
+        YapiVectorFormat format;
+        uint16_t dim = 0;
+        
+        if (strcmp(typecode, "f") == 0) {  // float
+            format = YAPI_VECTOR_FORMAT_FLOAT32;
+            dim = (uint16_t)PyObject_Length(value);
+        } else if (strcmp(typecode, "d") == 0) {  // double
+            format = YAPI_VECTOR_FORMAT_FLOAT64;
+            dim = (uint16_t)PyObject_Length(value);
+        } else {
+            anpRaiseExceptionFromString(anpNotSupportedException, "Unsupported array type for VECTOR");
+            return -1;
+        }
+        
+        // Store the format in var for later use in anpVarToPython
+        var->typeData.vectorFormat = format;
+        
+        // Get array buffer
+        PyObject* bufferObj = PyObject_CallMethod(value, "tobytes", NULL);
+        if (!bufferObj) {
+            return -1;
+        }
+        
+        if (!PyBytes_Check(bufferObj)) {
+            Py_DECREF(bufferObj);
+            anpRaiseExceptionFromString(anpProgrammingErrorException, "Failed to get bytes from array");
+            return -1;
+        }
+        
+        uint8_t* arrayBuffer = (uint8_t*)PyBytes_AS_STRING(bufferObj);
+        uint32_t bufferLen = (uint32_t)PyBytes_GET_SIZE(bufferObj);
+        
+        // Convert array to YapiVector
+        if (yapiVectorFromArray(vector, format, dim, arrayBuffer, bufferLen, 0) != YAPI_SUCCESS) {
+            Py_DECREF(bufferObj);
+            return anpRaiseAndReturnIntException();
+        }
+        
+        Py_DECREF(bufferObj);
+        
+        // Store the vector pointer in data
+        *((YapiVector**)(var->data + arrayPos * sizeof(YapiVector*))) = vector;
+        var->indicator[arrayPos] = (int32_t)sizeof(YapiVector*);
+        return 0;
+    }
+
     anpRaiseExceptionFromString(anpNotSupportedException, "not support type");
     return -1;
 }
@@ -958,6 +1196,10 @@ int anpGetSize(PyObject * value)
         return (int)(enCodeStrSize + 1);
     }
 
+    if (PyObject_TypeCheck(value, anpPyTypeArray)) {
+        return sizeof(YapiVector);
+    }
+
     return 0;
 }
 
@@ -1014,6 +1256,10 @@ YapiType anpGetType(PyObject * value)
 
     if (PyList_Check(value) || PyDict_Check(value)) {
         return YAPI_TYPE_VARCHAR;
+    }
+
+    if (PyObject_TypeCheck(value, anpPyTypeArray)) {
+        return YAPI_TYPE_VECTOR;
     }
 
     return 0;
