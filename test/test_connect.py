@@ -23,7 +23,7 @@ class TestCase(test_base.TestBaseCase):
         del conn
 
     def test_conn_fail(self):
-        self.assertRaises(TypeError, yaspy.connect, dsn="127.0.0.1:1688")
+        self.assertRaises(yaspy.DatabaseError, yaspy.connect, dsn="127.0.0.1:1688")
 
     def test_conn_srv_fail(self):
         self.assertRaises(yaspy.DatabaseError, yaspy.connect, "127.0.0.1:1600", self.user, self.passwd)

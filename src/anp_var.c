@@ -83,16 +83,23 @@ static PyObject* yaspyVarSetValue(AnpVar* var, PyObject *args)
         return NULL;
     }
 
+    if (pos >= var->elements) {
+        PyObject* errMsg = PyUnicode_FromString("set value index out of range");
+        PyErr_SetObject(PyExc_IndexError, errMsg);
+        Py_DECREF(errMsg);
+        return NULL;
+    }
+
     if (anpVarSetValue(var->connection->hConn, var, pos, value) < 0) {
         return NULL;
     }
 
-    var->size = anpGetSize(value);
     switch (var->dbType) {
         case YAPI_TYPE_BIGINT: {
             int overflow = 0;
             PyLong_AsLongLongAndOverflow(value, &overflow);
             if (overflow) {
+                var->size = anpGetSize(value);
                 var->dbType = YAPI_TYPE_VARCHAR;
             }
             break;
@@ -102,9 +109,11 @@ static PyObject* yaspyVarSetValue(AnpVar* var, PyObject *args)
         case YAPI_TYPE_JSON:
         case YAPI_TYPE_YM_INTERVAL:
             var->dbType = YAPI_TYPE_VARCHAR;
+            var->size = anpGetSize(value);
             break;
         case YAPI_TYPE_BIT:
             var->dbType = YAPI_TYPE_BIGINT;
+            var->size = anpGetSize(value);
             break;
         default:
             break;
@@ -122,6 +131,12 @@ static PyObject* yaspyVarGetValue(AnpVar* var, PyObject* args, PyObject* keyword
     uint32_t pos = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "|i", keywordList, &pos)) {
+        return NULL;
+    }
+    if (pos >= var->elements) {
+        PyObject* errMsg = PyUnicode_FromString("get value index out of range");
+        PyErr_SetObject(PyExc_IndexError, errMsg);
+        Py_DECREF(errMsg);
         return NULL;
     }
     return anpVarGetSingleValue(var->connection->hConn, var, pos);
@@ -693,6 +708,12 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
             var->indicator[arrayPos] = (int32_t)enCodeStrSize;
             var->dataOffset += sizeof(YapiLobLocator*);
         } else {
+            if (var->dbType == YAPI_TYPE_BOOL) {
+                bool* b = (bool*)var->data;
+                b[arrayPos] = PyObject_IsTrue(value);
+                var->indicator[arrayPos] = (int32_t)sizeof(bool);
+                return 0;
+            }
             uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
             if (costSize > var->size) {
                 if (adjustAnpVarBuffSize(var, costSize) < 0) {
@@ -717,6 +738,12 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
              var->indicator[arrayPos] = (int32_t)PyBytes_GET_SIZE(value);
              var->dataOffset += sizeof(YapiLobLocator*);
              return 0;
+        }
+        if (var->dbType == YAPI_TYPE_BOOL) {
+            bool* b = (bool*)var->data;
+            b[arrayPos] = PyObject_IsTrue(value);
+            var->indicator[arrayPos] = (int32_t)sizeof(bool);
+            return 0;
         }
 
         Py_ssize_t byteSize = PyBytes_GET_SIZE(value);
@@ -772,6 +799,11 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
             var->indicator[arrayPos] = var->size;
             var->dataOffset += var->size;
             return 0;
+        } else if (var->dbType == YAPI_TYPE_BOOL) {
+            bool* b = (bool *)var->data;
+            b[arrayPos] = PyObject_IsTrue(value);
+            var->indicator[arrayPos] = (int32_t)sizeof(bool);
+            return 0;
         }
 
         int64_t* iv = (int64_t*)var->data;
@@ -788,9 +820,39 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
     }
 
     if (PyFloat_Check(value)) {
-        double *dv = (double *)var->data;
-        dv[arrayPos] = PyFloat_AsDouble(value);
-        var->indicator[arrayPos] = (int32_t)sizeof(double);
+        if (var->dbType == YAPI_TYPE_BOOL) {
+            bool* b = (bool *)var->data;
+            b[arrayPos] = PyObject_IsTrue(value);
+            var->indicator[arrayPos] = (int32_t)sizeof(bool);
+            return 0;
+        }
+        if (var->dbType == YAPI_TYPE_VARCHAR) {
+            Py_ssize_t  enCodeStrSize = 0;
+            PyObject*   numberStr = PyObject_Str(value);
+            const char* bindStr = PyUnicode_AsUTF8AndSize(numberStr, &enCodeStrSize);
+            if (bindStr == NULL) {
+                return -1;
+            }
+            uint32_t costSize = (uint32_t)(enCodeStrSize + 1);
+            if (adjustAnpVarBuffSize(var, NUMBER_STRING_BUFFER_SIZE) < 0) {
+                return -1;
+            }
+
+            strcpy(var->data + var->dataOffset, bindStr);
+            var->indicator[arrayPos] = (int32_t)enCodeStrSize;
+            var->dataOffset += costSize;
+            var->data[var->dataOffset - 1] = '\0';
+            return 0;
+        }
+        if (var->dbType == YAPI_TYPE_DOUBLE) {
+          double* dv = (double*)var->data;
+          dv[arrayPos] = PyFloat_AsDouble(value);
+          var->indicator[arrayPos] = (int32_t)sizeof(double);
+          return 0;
+        }
+        float* fv = (float*)var->data;
+        fv[arrayPos] = (float)PyFloat_AsDouble(value);
+        var->indicator[arrayPos] = (int32_t)sizeof(float);
         return 0;
     }
 

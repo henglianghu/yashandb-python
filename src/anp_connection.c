@@ -59,27 +59,94 @@ static PyObject* anpReprConnection(AnpConnection* connection)
     return result;
 }
 
+static int anpConnectionSplitComponent(PyObject *sourceObj, const char *splitString, const char *methodName,
+                                       PyObject **beforePartObj, PyObject **afterPartObj)
+{
+    Py_ssize_t size, pos;
+    PyObject *posObj;
+
+    posObj = PyObject_CallMethod(sourceObj, methodName, "s", splitString);
+    if (!posObj)
+        return -1;
+    pos = PyLong_AsLong(posObj);
+    Py_DECREF(posObj);
+    if (PyErr_Occurred())
+        return -1;
+    if (pos < 0) {
+        *beforePartObj = *afterPartObj = NULL;
+    } else {
+        size = PySequence_Size(sourceObj);
+        if (PyErr_Occurred())
+            return -1;
+        *afterPartObj = PySequence_GetSlice(sourceObj, pos + 1, size);
+        if (!*afterPartObj)
+            return -1;
+        *beforePartObj = PySequence_GetSlice(sourceObj, 0, pos);
+        if (!*beforePartObj) {
+            Py_DECREF(*afterPartObj);
+            *afterPartObj = NULL;
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static int anpConnectionInit(AnpConnection *conn, PyObject *args,
                              PyObject *keywordArgs)
 {
-    const char * dsn, *user, *password;
+    PyObject *dsnObj, *userObj, *passwordObj;
+    PyObject *beforePartObj, *afterPartObj;
     static char* kwlist[] = {"dsn", "user", "password", NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "sss", kwlist, &dsn, &user, &password)) {
+    dsnObj = userObj = passwordObj = NULL;
+    beforePartObj = afterPartObj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, keywordArgs, "O|OO", kwlist, &dsnObj, &userObj, &passwordObj)) {
         return -1;
     }
 
     if (yapiAllocEnv(&anpEnv) != YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }
-    
-    conn->username = PyUnicode_FromString(user);
-    conn->dsn = PyUnicode_FromString(dsn);
+
+    Py_XINCREF(dsnObj);
+    conn->dsn = dsnObj;
+    Py_XINCREF(userObj);
+    conn->username = userObj;
+    Py_XINCREF(passwordObj);
+
+    if (conn->dsn && !userObj && !passwordObj) {
+        if (anpConnectionSplitComponent(conn->dsn, "/", "find", &beforePartObj,
+                                        &afterPartObj) < 0) {
+            return -1;
+        }
+        if (beforePartObj) {
+            Py_DECREF(conn->dsn);
+            conn->dsn = NULL;
+            conn->username = beforePartObj;
+            passwordObj = afterPartObj;
+            if (anpConnectionSplitComponent(passwordObj, "@", "rfind", &beforePartObj, &afterPartObj) < 0) {
+                return -1;
+            }
+            if (beforePartObj) {
+                Py_DECREF(passwordObj);
+                passwordObj = beforePartObj;
+                conn->dsn = afterPartObj;
+            }
+        }
+    }
+    if (!conn->dsn || !conn->username || !passwordObj) {
+        anpRaiseExceptionFromString(anpDatabaseErrorException, "invalid connect info");
+        return -1;
+    }
 
     YapiResult res;
+    const char *dsn = PyUnicode_AsUTF8(conn->dsn);
+    const char *user = PyUnicode_AsUTF8(conn->username);
+    const char *password = PyUnicode_AsUTF8(passwordObj);
     Py_BEGIN_ALLOW_THREADS
-        res = yapiConnect(anpEnv, dsn, (int16_t)strlen(dsn), user, (int16_t)strlen(user), password, (int16_t)strlen(password), &conn->hConn);
+        res = yapiConnect(anpEnv, dsn, strlen(dsn), user, strlen(user), password, strlen(password), &conn->hConn);
     Py_END_ALLOW_THREADS
 
+    Py_XDECREF(passwordObj);
     if (res != YAPI_SUCCESS) {
         return anpRaiseAndReturnIntException();
     }

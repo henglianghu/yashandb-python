@@ -15,6 +15,7 @@ PyObject *anpNotSupportedException = NULL;
 static void anpErrorFree(AnpError *error)
 {
     Py_CLEAR(error->message);
+    Py_CLEAR(error->sqlStat);
     PyObject_Del(error);
 }
 
@@ -200,7 +201,6 @@ static AnpError *anpErrorNewFromString(const char *message)
     if (!error) {
         return NULL;
     }
-    Py_INCREF(Py_None);
     error->message = PyUnicode_DecodeASCII(message, strlen(message), NULL);
     if (!error->message) {
         Py_DECREF(error);
