@@ -1,32 +1,17 @@
-# yaspy
+# yaspy|崖山数据库python语言驱动程序
 
-yaspy is a Python extension module, through which the YashanDB database can be accessed. It follows the conventions of [Python Database API 2.0 Specification].
+yaspy 是 YashanDB 官方 Python 语言数据库驱动，依赖崖山数据库C驱动。
 
-## Prepare
-execute `cd anchor_python && git submodule update --init --recursive` to download the c driver.
+### 特性
 
-## Build
-`python setup.py build`
+- ✅ Python 3.6+
+- ✅ 连接池支持
+- ✅ 预处理语句与批量操作
+- ✅ 事务支持
+- ✅ 多版本运行时检测与自动适配
 
-## Package
-```
-pip install wheel
-python setup.py build bdist_wheel
-```
+### 兼容性说明
 
-## Installation
-`python setup.py install`
-
-## Documentation
-See [/doc].
-
-## Tests
-
-See [/test].
- python -m unittest test*.py
-
-## License
-
-yaspy is a commercial software
-
-
+| 驱动版本 | 版本发布时间 | 新特性         | 最低兼容C驱动版本 | 完全支持C驱动版本 |
+| -------- | ------------ | -------------- | ----------------- | ----------------- |
+| 1.0.1    | 2026.3.18    | 支持线程池能力 | v23.4.1.100       | v23.4.4.100       |
