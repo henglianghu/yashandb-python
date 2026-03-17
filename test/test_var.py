@@ -467,7 +467,7 @@ class TestCase(test_base.TestBaseCase):
                     2,
                     3,
                     4,
-                    0.0,
+                    5.5,
                     6.6,
                     Decimal("7.0000000007"),
                     datetime.date(2006, 1, 2),

@@ -1,5 +1,6 @@
-#include "anp_module.h"
 #include <Python.h>
+#include <datetime.h>
+#include "anp_module.h"
 #include "anp_exception.h"
 #include "anp_connection.h"
 #include "anp_cursor.h"
@@ -48,9 +49,31 @@ int yaspyModuleAddApiType(PyObject *module, const char *name, YapiType defaultDb
     return 0;
 }
 
+static PyObject* anpModuleTimeFromTicks(PyObject* module, PyObject* args)
+{
+    PyObject *dateTime = PyDateTime_FromTimestamp(args);
+    int hour = PyDateTime_DATE_GET_HOUR(dateTime);
+    int minute = PyDateTime_DATE_GET_MINUTE(dateTime);
+    int second = PyDateTime_DATE_GET_SECOND(dateTime);
+    int usecond = PyDateTime_DATE_GET_MICROSECOND(dateTime);
+    Py_XDECREF(dateTime);
+    return PyTime_FromTime(hour, minute, second, usecond);
+}
 
+static PyObject* anpModuleDateFromTicks(PyObject* module, PyObject* args)
+{
+    return PyDate_FromTimestamp(args);
+}
+
+static PyObject* anpModuleTimestampFromTicks(PyObject* module, PyObject* args)
+{
+    return PyDateTime_FromTimestamp(args);
+}
 
 static PyMethodDef AnchorMethods[] = {
+    { "DateFromTicks", (PyCFunction) anpModuleDateFromTicks, METH_VARARGS },
+    { "TimeFromTicks", (PyCFunction) anpModuleTimeFromTicks, METH_VARARGS },
+    { "TimestampFromTicks", (PyCFunction) anpModuleTimestampFromTicks, METH_VARARGS },
     { NULL }
 };
 
@@ -71,6 +94,7 @@ PyMODINIT_FUNC
 PyInit_yaspy(void)
 {
     PyObject *module;
+    PyDateTime_IMPORT;
     
     if (anpInitDecimal() != YAPI_SUCCESS){
         return NULL;

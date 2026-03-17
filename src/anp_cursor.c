@@ -342,6 +342,10 @@ static YapiResult anpCursorSetBindVariableHelper(AnpCursor* cursor, unsigned num
             needCreateVar = true;
         }
 
+        if (oldVar->bufferSize < bindCostSize * numElements) {
+            needCreateVar = true;
+        }
+
         varToSet = oldVar;
         if ((numElements > oldVar->elements) || needCreateVar) {
             oldVar->size = bindCostSize;
@@ -417,7 +421,6 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
         if (paramValue == NULL) {
             return YAPI_ERROR;
         }
-        Py_DECREF(paramValue);
         if (i < origNumParams) {
             origVar = PyList_GET_ITEM(cursor->bindVariables, i);
             if (origVar == Py_None) {
@@ -428,8 +431,10 @@ YapiResult anpCursorSetBindByPos(AnpCursor* cursor, PyObject* parameters, unsign
         }
 
         if (anpCursorSetBindVariableHelper(cursor, numElements, arrayPos, paramValue, (AnpVar*)origVar, &newVar) < 0) {
+            Py_DECREF(paramValue);
             return YAPI_ERROR;
         }
+        Py_DECREF(paramValue);
         if (newVar != NULL) {
             if (i < (uint32_t)PyList_GET_SIZE(cursor->bindVariables)) {
                 if (PyList_SetItem(cursor->bindVariables, i, (PyObject*)newVar) < 0) {
@@ -757,24 +762,22 @@ static int getDefaultTypeSize(YapiType type)
     switch (type)
     {
         case YAPI_TYPE_BOOL:
-        case YAPI_TYPE_TINYINT:
             typeSize = 1;
             break;
+        case YAPI_TYPE_TINYINT:
         case YAPI_TYPE_SMALLINT:
-            typeSize = 2;
-            break;
         case YAPI_TYPE_INTEGER:
-        case YAPI_TYPE_FLOAT:
-            typeSize = 4;
-            break;
         case YAPI_TYPE_BIGINT:
+        case YAPI_TYPE_FLOAT:
         case YAPI_TYPE_DOUBLE:
         case YAPI_TYPE_DATE:
         case YAPI_TYPE_SHORTTIME:
-        case YAPI_TYPE_TIMESTAMP:
         case YAPI_TYPE_DS_INTERVAL:
         case YAPI_TYPE_BIT:
             typeSize = 8;
+            break;
+        case YAPI_TYPE_TIMESTAMP:
+            typeSize = 12;
             break;
         case YAPI_TYPE_NUMBER:
             typeSize = 40;
@@ -880,6 +883,12 @@ static void resetBindAnpVars(AnpCursor* cursor)
 
 static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr, PyObject* execArgs)
 {
+    const char* sql = PyUnicode_AsUTF8(sqlStr);
+    if (!sql) {
+        cursor->isFail = 1;
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "invalid sql statement");
+        return -1;
+    }
     if (sqlStr == cursor->statment && !cursor->isFail) {
         sqlStr = cursor->statment;
         if (execArgs && ((PySequence_Check(cursor->bindVariables) ^ PySequence_Check(execArgs)) ||
@@ -897,7 +906,6 @@ static int anpInternalPrepare(AnpCursor* cursor, PyObject *sqlStr, PyObject* exe
     cursor->sqlParamCnt = 0;
 
     int status;
-    char* sql = PyBytes_AsString(PyUnicode_AsUTF8String(sqlStr));
     int32_t sqlLen = (int32_t)strlen(sql);
     if (yapiGetSqlParamCount(sql, sqlLen, &cursor->sqlParamCnt) != YAPI_SUCCESS) {
         cursor->isFail = 1;
@@ -1126,6 +1134,7 @@ static PyObject* anpCursorCallProc(AnpCursor* cursor, PyObject* args)
         return anpRaiseAndReturnNullException();
     }
     PyTuple_SetItem(argsTuple, 0, PyUnicode_FromString(sql));
+    Py_XINCREF(params);
     PyTuple_SetItem(argsTuple, 1, params);
     if (!anpCursorExecute(cursor, argsTuple, NULL)) {
         Py_DECREF(argsTuple);
@@ -1168,6 +1177,11 @@ static PyObject* anpCursorExecuteMany(AnpCursor* cursor, PyObject* args, PyObjec
         PyErr_SetString(PyExc_TypeError, "parameters should be a list of sequences/dictionaries "
                 "or an integer specifying the number of times to execute "
                 "the statement");
+        return NULL;
+    }
+
+    if (!PyList_Check(execArgs)) {
+        anpRaiseExceptionFromString(anpProgrammingErrorException, "invalid argument type");
         return NULL;
     }
 
