@@ -886,7 +886,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
                 }
             }
 
-            strcpy(var->data + var->dataOffset, bindStr);
+            memcpy(var->data + var->dataOffset, bindStr, enCodeStrSize);
             var->indicator[arrayPos] = (int32_t)enCodeStrSize;
             var->dataOffset += costSize;
             var->data[var->dataOffset - 1] = '\0';
@@ -914,7 +914,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         Py_ssize_t byteSize = PyBytes_GET_SIZE(value);
         if (byteSize == 0) {
             var->indicator[arrayPos] = YAPI_NULL_DATA;
-            return 0;   
+            return 0;
         }
 
         uint32_t costSize = (uint32_t)byteSize;
@@ -924,7 +924,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
             }
         }
 
-        strcpy(var->data + var->dataOffset, PyBytes_AS_STRING(value));
+        memcpy(var->data + var->dataOffset, PyBytes_AS_STRING(value), byteSize);
         var->indicator[arrayPos] = (int32_t)costSize;
         var->dataOffset += costSize;
         return 0;
