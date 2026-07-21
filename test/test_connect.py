@@ -4,8 +4,8 @@ import test_base
 
 class TestCase(test_base.TestBaseCase):
     need_connection = False
-    usr = "regress"
-    pwd = "regress"
+    usr = test_base.TestBaseCase.user
+    pwd = test_base.TestBaseCase.passwd
 
     def test_conn(self):
         conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
@@ -33,7 +33,7 @@ class TestCase(test_base.TestBaseCase):
         self.assertFalse(conn.autocommit)
 
     def test_autocommit_true(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         self.assertFalse(conn.autocommit)
         conn.autocommit = True
         self.assertTrue(conn.autocommit)
@@ -42,7 +42,7 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("create table t_p_autocommit(id int)")
         self.assertEqual(0, cursor.rowcount)
         cursor.execute("insert into t_p_autocommit values(1)")
-        conn2 = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn2 = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         cursor2 = conn2.cursor()
         cursor2.execute("select count(*) from t_p_autocommit")
         row = cursor2.fetchone()
@@ -50,14 +50,14 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("drop table if exists t_p_autocommit")
 
     def test_autocommit_false(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         self.assertFalse(conn.autocommit)
         cursor = conn.cursor()
         cursor.execute(self.dropTable("t_p_autocommit"))
         cursor.execute(self.createTable("t_p_autocommit", "id int"))
         self.assertEqual(0, cursor.rowcount)
         cursor.execute("insert into t_p_autocommit values(1)")
-        conn2 = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn2 = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         cursor2 = conn2.cursor()
         cursor2.execute("select count(*) from t_p_autocommit")
         row = cursor2.fetchone()
@@ -65,18 +65,18 @@ class TestCase(test_base.TestBaseCase):
         cursor.execute("drop table if exists t_p_autocommit")
 
     def test_repr_connection(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
-        self.assertEqual(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
+        self.assertEqual(repr(conn), f'yaspy.Connection to {self.usr}@{self.getDsn()}')
         conn.close()
-        self.assertEqual(repr(conn), 'yaspy.Connection to regress@127.0.0.1:1688')
+        self.assertEqual(repr(conn), f'yaspy.Connection to {self.usr}@{self.getDsn()}')
     
     def test_empty_cursor(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         cursor = conn.cursor()
         del cursor
     
     def test_connection_re_close(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.usr, password=self.pwd)
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.usr, password=self.pwd)
         conn.close()
         try:
             conn.close()

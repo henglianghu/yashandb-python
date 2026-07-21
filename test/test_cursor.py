@@ -270,7 +270,7 @@ class TestCase(test_base.TestBaseCase):
         conn.close()
     
     def test_cursor_re_close(self):
-        conn = yaspy.connect(dsn="127.0.0.1:1688", user=self.user, password=self.passwd)
+        conn = yaspy.connect(dsn=self.getDsn(), user=self.user, password=self.passwd)
         cursor = conn.cursor()
         cursor.close()
         try:

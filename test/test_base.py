@@ -1,12 +1,13 @@
 import unittest
+import os
 import yaspy
 
 class TestBaseCase(unittest.TestCase):
     need_connection = True
-    host = "127.0.0.1"
-    port = 1688
-    user = "regress"
-    passwd = "regress"
+    host = os.environ.get("YASPY_TEST_HOST", "127.0.0.1")
+    port = int(os.environ.get("YASPY_TEST_PORT", "1688"))
+    user = os.environ.get("YASPY_TEST_MAIN_USER", "regress")
+    passwd = os.environ.get("YASPY_TEST_MAIN_PASSWORD", "regress")
 
     def setUp(self):
         if self.need_connection:
@@ -20,7 +21,7 @@ class TestBaseCase(unittest.TestCase):
             del self.connection
 
     def getDsn(self):
-        return self.host + ":"+ str(self.port)
+        return os.environ.get("YASPY_TEST_CONNECT_STRING", self.host + ":" + str(self.port))
 
     def createTable(self, name, colums):
         sql = "create table " + name + "(" + colums + ")"

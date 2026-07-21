@@ -32,9 +32,11 @@ static void anpVarFree(AnpVar *var)
         } else if (var->dbType == YAPI_TYPE_VECTOR) {
             // Free YapiVector objects for VECTOR type
             for (uint32_t i = 0; i < var->elements; i++) {
-                YapiVector* vector = *((YapiVector**)(var->data + i * sizeof(YapiVector*)));
+                YapiVector** vectorSlot = (YapiVector**)(var->data + i * sizeof(YapiVector*));
+                YapiVector* vector = *vectorSlot;
                 if (vector != NULL) {
-                    yapiDescFree2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR);
+                    yapiDescFree2(anpEnv, vector, YAPI_DESC_VECTOR);
+                    *vectorSlot = NULL;
                 }
             }
             // Use memset to set all pointers to NULL to prevent double free
@@ -171,9 +173,11 @@ static PyObject* yaspyVarFree(AnpVar* var)
         } else if (var->dbType == YAPI_TYPE_VECTOR) {
             // Free YapiVector objects for VECTOR type
             for (uint32_t i = 0; i < var->elements; i++) {
-                YapiVector* vector = *((YapiVector**)(var->data + i * sizeof(YapiVector*)));
+                YapiVector** vectorSlot = (YapiVector**)(var->data + i * sizeof(YapiVector*));
+                YapiVector* vector = *vectorSlot;
                 if (vector != NULL) {
-                    yapiDescFree2(anpEnv, (void**)&vector, YAPI_DESC_VECTOR);
+                    yapiDescFree2(anpEnv, vector, YAPI_DESC_VECTOR);
+                    *vectorSlot = NULL;
                 }
             }
             // Use memset to set all pointers to NULL to prevent double free
@@ -378,11 +382,11 @@ AnpVar* anpNewVar(AnpCursor* cursor, VarAssist *assist)
             Py_DECREF(var);
             return (AnpVar*)PyErr_NoMemory();
         }
-        
+
         memset(var->data, 0, var->bufferSize);
         // Initialize vector format to a default value
         var->typeData.vectorFormat = YAPI_VECTOR_FORMAT_FLEX;
-        
+
         // Allocate YapiVector objects for each element
         for (uint32_t i = 0; i < var->elements; i++) {
             YapiVector* vector = NULL;
@@ -1171,7 +1175,7 @@ int anpVarSetValue(YapiConnect* hConn, AnpVar* var, uint32_t arrayPos, PyObject*
         }
         
         Py_DECREF(bufferObj);
-        
+
         // Store the vector pointer in data
         *((YapiVector**)(var->data + arrayPos * sizeof(YapiVector*))) = vector;
         var->indicator[arrayPos] = (int32_t)sizeof(YapiVector*);
@@ -1259,7 +1263,8 @@ int anpGetSize(PyObject * value)
     }
 
     if (PyObject_TypeCheck(value, anpPyTypeArray)) {
-        return sizeof(YapiVector);
+        // For VECTOR type, we store pointers to YapiVector objects, not the struct itself
+        return sizeof(YapiVector*);
     }
 
     return 0;
